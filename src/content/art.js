@@ -1,6 +1,6 @@
 modules["src/content/art.mjs"]=(()=>{
 
-const artFiles={"human_archer": "@art:human_archer", "human_mage": "@art:human_mage", "elf_warrior": "@art:elf_warrior", "elf_archer": "@art:elf_archer", "elf_mage": "@art:elf_mage", "sword": "@art:sword", "bow": "@art:bow", "staff": "@art:staff", "fire": "@art:fire", "water": "@art:water", "lightning": "@art:lightning", "star": "@art:star", "background": "@art:background", "human_warrior": "@art:human_warrior", "orc_warrior": "@art:orc_warrior", "orc_archer": "@art:orc_archer", "orc_mage": "@art:orc_mage", "dwarf_warrior": "@art:dwarf_warrior", "dwarf_archer": "@art:dwarf_archer", "dwarf_mage": "@art:dwarf_mage"};
+const artFiles={"human_archer": "@art:human_archer", "human_mage": "@art:human_mage", "elf_warrior": "@art:elf_warrior", "elf_archer": "@art:elf_archer", "elf_mage": "@art:elf_mage", "sword": "@art:sword", "bow": "@art:bow", "staff": "@art:staff", "fire": "@art:fire", "water": "@art:water", "lightning": "@art:lightning", "star": "@art:star", "background": "@art:background", "human_warrior": "@art:human_warrior", "orc_warrior": "@art:orc_warrior", "orc_archer": "@art:orc_archer", "orc_mage": "@art:orc_mage", "dwarf_warrior": "@art:dwarf_warrior", "dwarf_archer": "@art:dwarf_archer", "dwarf_mage": "@art:dwarf_mage", "monster_fire": "@art:monster_fire", "monster_water": "@art:monster_water", "monster_lightning": "@art:monster_lightning", "monster_boss": "@art:monster_boss", "reward_back": "@art:reward_back"};
 function applyArt(assets,visuals){
  const set=(id,key,opts={})=>Object.assign(assets[id],{file:artFiles[key],revision:3,scale:1,sourceRect:[0,0,1254,1254],...opts});
  const hands={human_warrior:[870,918],human_archer:[876,924],human_mage:[870,932],elf_warrior:[865,918],elf_archer:[864,912],elf_mage:[866,930],orc_warrior:[883,930],orc_archer:[874,924],orc_mage:[880,936],dwarf_warrior:[926,922],dwarf_archer:[893,936],dwarf_mage:[912,943]};
@@ -34,6 +34,9 @@ function applyArt(assets,visuals){
   };
  }
 
+ // 몬스터: 1254×1254, 기준점(바닥 중앙) (627,1165). 보상 카드 뒷면: 600×840. 규격은 docs/art-spec.md.
+ for(const k of ['fire','water','lightning','boss'])set(`asset_monster_${k}`,`monster_${k}`,{pivot:{x:627,y:1165}});
+ set('asset_reward_back','reward_back',{sourceRect:[0,0,600,840]});
  set('asset_star','star');set('asset_background','background',{sourceRect:[0,0,1536,1024]});
  for(const r of ['human','elf','orc','dwarf'])set(`icon_race_${r}`,`${r}_warrior`,{sourceRect:[200,200,860,540]});
  for(const [j,w] of [['warrior','sword'],['archer','bow'],['mage','staff']])set(`icon_job_${j}`,w);

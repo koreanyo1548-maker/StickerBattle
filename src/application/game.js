@@ -34,7 +34,8 @@ function beginTurn(s,c){
 function startBlind(s,c){
  const r=s.run,i=r.blindIndex,blind=c.blinds[i],blindId=`${r.runId}:blind:${i}`;
  const deck=r.deckDefIds.map((id,k)=>({instanceId:`${blindId}:card:${k}`,stickerDefId:id})),sh=shuffle(deck,r.rngState);
- s.battle={blindId,blindIndex:i,target:blind.target,boss:blind.boss,elementId:r.blindElements[i],nextElementId:r.blindElements[i+1]??null,turn:0,actionsUsed:0,drawPile:sh.list,hand:[],discardPile:[],rngState:sh.seed,lastScore:null,outcome:null};
+ const elementId=r.blindElements[i],monsterId=blind.boss?c.bossMonsterId:c.monsters.find(m=>m.elementId===elementId).id;
+ s.battle={blindId,blindIndex:i,target:blind.target,boss:blind.boss,monsterId,elementId,nextElementId:r.blindElements[i+1]??null,turn:0,actionsUsed:0,drawPile:sh.list,hand:[],discardPile:[],rngState:sh.seed,lastScore:null,outcome:null};
  s.events.push({type:'BlindStarted',blindIndex:i,elementId:s.battle.elementId,target:blind.target});
  beginTurn(s,c);
 }

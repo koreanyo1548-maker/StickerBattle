@@ -17,8 +17,7 @@ node tools/build.mjs --check  # index.html이 소스와 일치하는지 확인
 | `tools/load-modules.mjs` | 화면 없는 모듈을 node에서 불러오는 도우미 |
 | `tools/test-rules.mjs` | 규칙·게임 흐름 테스트: `node --test tools/test-rules.mjs` |
 | `tools/balance-bot.mjs` | 실제 엔진으로 봇을 돌려 목표 점수 곡선 점검 |
+| `tools/make-placeholder-art.mjs` | 임시 그림(몬스터·보상 카드 뒷면)과 가이드 생성. 규격은 `docs/art-spec.md` |
 | `tools/sim-balance.mjs` | 설계 단계용 단순화 시뮬레이터 (조합 무기 효과를 단순화함) |
 
-**작업 중**: 규칙은 새 블라인드 구조로 바뀌었지만 화면은 아직 옛 규칙이라, `index.html`은 마지막 플레이 가능 빌드로 남겨 두었다. 자세한 건 `docs/implementation-plan.md`.
-
-설계 문서: `docs/design-sketch.md`, `docs/implementation-plan.md`.
+설계 문서: `docs/design-sketch.md`, `docs/implementation-plan.md`. 그림 규격: `docs/art-spec.md`.

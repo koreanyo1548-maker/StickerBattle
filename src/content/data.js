@@ -55,11 +55,14 @@ function asset(id,pivot={x:0,y:0}){assets[id]={id,file:null,width:1024,height:10
 const visuals={};
 characters.forEach(c=>{visuals[c.visualProfileId]={id:c.visualProfileId,rigId:rig.id,bodyAssetId:asset(`${c.id}_body`),frontHandAssetId:asset(`${c.id}_hand`,{x:712,y:636}),anchors:rig.anchors,layerOrder:rig.layerOrder};});
 weapons.forEach(w=>asset(w.assetId,{x:712,y:636}));elements.forEach(e=>asset(e.assetId,{x:772,y:316}));asset('asset_star');[...races,...jobs].forEach(d=>asset(d.iconAssetId));asset('asset_background');
-applyArt(assets,visuals);
 // 블라인드: 목표 점수 하나. 속성은 런 시작 때 시드로 정한다. 몬스터 그림은 아직 없어 속성 아이콘으로 대신한다.
 const blinds=[100,400,1200,3500].map((target,i,a)=>({id:`blind_${i+1}`,target,boss:i===a.length-1}));
-const monsters=elements.map(e=>({id:`monster_${e.id.slice(8)}`,elementId:e.id,nameKey:`monster_${e.id.slice(8)}`,assetId:e.assetId}));
-Object.assign(labels,{monster_fire:'불꽃 슬라임',monster_water:'물결 슬라임',monster_lightning:'번개 슬라임'});
+// 일반 블라인드는 블라인드 속성의 몬스터, 보스 블라인드는 bossMonsterId. 보스 속성도 시드로 정한다.
+const monsters=[...elements.map(e=>({id:`monster_${e.id.slice(8)}`,elementId:e.id})),{id:'monster_boss',elementId:null}].map(m=>({...m,nameKey:m.id,assetId:asset(`asset_${m.id}`)}));
+const bossMonsterId='monster_boss';
+Object.assign(labels,{monster_fire:'불꽃 슬라임',monster_water:'물결 슬라임',monster_lightning:'번개 슬라임',monster_boss:'슬라임 왕'});
+asset('asset_reward_back');
+applyArt(assets,visuals);
 // 캐릭터 카드: 블라인드별 확정 턴에는 손패 1장이 캐릭터 카드가 되고, 그 외 턴은 randomChance 확률.
 const characterRules={guaranteedTurns:[[1,2,3],[1],[1],[1]],randomChance:0.2};
 // 상성: 키가 값을 이긴다. 캐릭터마다 유리 ×(1+k·Lv), 불리 ÷(1+k·Lv), k=affinityPerLevel.
@@ -67,7 +70,7 @@ const affinity={beats:{element_fire:'element_lightning',element_lightning:'eleme
 // 블라인드 사이 보상: 앞면 3장 공개 → 뒤집어 섞기 → 1장 선택. 후보는 보유한 레시피 각각과 족보 종류 3개.
 // swaps는 보상 차례(블라인드 1·2·3 이후)별 섞기 교체 횟수.
 const rewardRules={offerCount:3,grades:[{id:'low',weight:60,levels:1},{id:'mid',weight:30,levels:2},{id:'high',weight:10,levels:3}],comboKinds:comboLevelKinds,swaps:[3,5,6]};
-const content={version:'0.8.0',characterRules,affinity,balance,labels,races,jobs,weapons,elements,characters,stickers,comboAxes,comboLevelKinds,combos,weaponEffects,weaponRecipes,initialDeck,attachRules,rig,assets,visuals,blinds,monsters,rewardRules};
+const content={version:'0.8.0',characterRules,affinity,balance,labels,races,jobs,weapons,elements,characters,stickers,comboAxes,comboLevelKinds,combos,weaponEffects,weaponRecipes,initialDeck,attachRules,rig,assets,visuals,blinds,monsters,bossMonsterId,rewardRules};
 const byId=(list,id)=>list.find(x=>x.id===id);
 const nameOf=id=>labels[id]??id??'없음';
 function deepFreeze(v){if(v&&typeof v==='object'&&!Object.isFrozen(v)){Object.values(v).forEach(deepFreeze);Object.freeze(v);}return v;}
@@ -97,7 +100,8 @@ function validateContent(c=content){
  c.initialDeck.forEach(id=>check(byId(c.stickers,id),'덱 참조'));
  check(c.initialDeck.length>=c.balance.handSize,'덱 크기');
  check(c.blinds.length===c.balance.blindCount&&c.blinds.every((b,i)=>Number.isInteger(b.target)&&b.target>0&&(i===0||b.target>c.blinds[i-1].target)),'블라인드 목표 점수');
- for(const m of c.monsters)check(byId(c.elements,m.elementId)&&c.assets[m.assetId]&&labels[m.nameKey],'몬스터 참조');
+ for(const m of c.monsters)check((!m.elementId||byId(c.elements,m.elementId))&&c.assets[m.assetId]&&labels[m.nameKey],'몬스터 참조');
+ check(byId(c.monsters,c.bossMonsterId),'보스 몬스터');
  check(c.elements.every(e=>c.monsters.some(m=>m.elementId===e.id)),'속성별 몬스터');
  for(const [k,v] of Object.entries(c.affinity.beats))check(byId(c.elements,k)&&byId(c.elements,v),'상성 참조');
  check(c.characterRules.guaranteedTurns.length===c.balance.blindCount&&c.characterRules.guaranteedTurns.every(ts=>ts.every(t=>Number.isInteger(t)&&t>=1&&t<=c.balance.turnsPerBlind))&&c.characterRules.randomChance>=0&&c.characterRules.randomChance<=1,'캐릭터 카드 규칙');
@@ -107,4 +111,4 @@ function validateContent(c=content){
  return true;
 }
 
-return {characterRules,affinity,balance,labels,races,jobs,weapons,elements,characters,stickers,comboAxes,comboLevelKinds,combos,weaponEffects,weaponRecipes,initialDeck,attachRules,rig,assets,visuals,blinds,monsters,rewardRules,content,byId,nameOf,validateContent};})();
+return {characterRules,affinity,balance,labels,races,jobs,weapons,elements,characters,stickers,comboAxes,comboLevelKinds,combos,weaponEffects,weaponRecipes,initialDeck,attachRules,rig,assets,visuals,blinds,monsters,bossMonsterId,rewardRules,content,byId,nameOf,validateContent};})();

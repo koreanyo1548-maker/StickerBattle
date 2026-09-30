@@ -5,6 +5,9 @@ const cache=new Map(),images=new Map();
 const surface=()=>{const cv=document.createElement('canvas');cv.width=512;cv.height=512;return cv;};
 const renderRequests=new WeakMap();
 const CACHE_LIMIT=96;
+const starTier=lv=>lv>=5?3:lv>=3?2:lv>=1?1:0;
+// 무기 광채는 속성 Lv2부터, Lv4에서 최대.
+const glowLevel=u=>u.weaponId&&u.elementId?Math.min(u.elementLevel,4):0;
 function composeVisual(unit,c){
  const def=byId(c.characters,unit.characterDefId),profile=c.visuals[def.visualProfileId];
  const recipe=c.weaponRecipes.find(r=>r.weaponId===unit.weaponId&&r.elementId===unit.elementId);
@@ -12,12 +15,13 @@ function composeVisual(unit,c){
  const result=profile.layerOrder.filter(layer=>entries[layer]).map(layer=>({layer,asset:c.assets[entries[layer]],anchor:profile.anchors[layer],unit,def}));
  const ornament=(layer,id,anchor,scale)=>({layer,asset:{...c.assets[id],scale:scale*1254/c.assets[id].sourceRect[2]},anchor,unit,def});
  // 신체 원화 좌표 기준 부착점. 종족·직업별 보정은 아트 테이블에서 관리한다.
- const pose=profile.rankPose;
- if(unit.stars>=3)result.unshift(ornament('crest','asset_rank_crest',pose.crest,pose.crestSize/1254));
+ // 별 Lv 구간: 1 이상 배지, 3 이상 어깨 장식, 5 이상 후면 문장.
+ const pose=profile.rankPose,tier=starTier(unit.starLevel);
+ if(tier>=3)result.unshift(ornament('crest','asset_rank_crest',pose.crest,pose.crestSize/1254));
  const bodyEnd=result.findIndex(e=>e.layer==='body')+1;
  const front=[];
- if(unit.stars>=2)front.push(ornament('rank','asset_rank_'+def.jobId.replace('job_',''),pose.shoulder,pose.shoulderSize/1254));
- if(unit.stars>=1)front.push(ornament('badge','asset_rank_badge',pose.badge,pose.badgeSize/1254));
+ if(tier>=2)front.push(ornament('rank','asset_rank_'+def.jobId.replace('job_',''),pose.shoulder,pose.shoulderSize/1254));
+ if(tier>=1)front.push(ornament('badge','asset_rank_badge',pose.badge,pose.badgeSize/1254));
  result.splice(bodyEnd,0,...front);
  return result;
 }
@@ -56,7 +60,7 @@ async function imageFor(file){
 async function renderCharacter(canvas,unit,c){
  const request={};renderRequests.set(canvas,request);
  const entries=composeVisual(unit,c);
- const key=JSON.stringify([entries.map(e=>[e.asset.id,e.asset.revision,e.anchor,e.asset.scale]),unit.elementStacks,unit.bodyElementId,unit.bodyElementStacks]);
+ const key=JSON.stringify([entries.map(e=>[e.asset.id,e.asset.revision,e.anchor,e.asset.scale]),unit.elementId,glowLevel(unit)]);
  if(!cache.has(key)){
   if(cache.size>=CACHE_LIMIT)cache.delete(cache.keys().next().value);
   cache.set(key,(async()=>{
@@ -64,8 +68,8 @@ async function renderCharacter(canvas,unit,c){
    for(const entry of entries){
     if(entry.asset.file){try{
      const image=await imageFor(entry.asset.file),a=entry.asset;ctx.save();ctx.translate(entry.anchor.x,entry.anchor.y);ctx.rotate(a.rotation??0);
-     if(entry.layer==='weapon'&&unit.elementId&&(unit.elementStacks||1)>=2){
-      ctx.shadowColor=byId(c.elements,unit.elementId).color;ctx.shadowBlur=(unit.elementStacks||1)*7;
+     if(entry.layer==='weapon'&&glowLevel(unit)>=2){
+      ctx.shadowColor=byId(c.elements,unit.elementId).color;ctx.shadowBlur=glowLevel(unit)*7;
      }
      const [sx,sy,sw,sh]=a.sourceRect,[dx,dy]=a.offset??[0,0];ctx.drawImage(image,sx,sy,sw,sh,dx,dy,sw*a.scale,sh*a.scale);ctx.restore();
     }catch{placeholder(ctx,entry,c);fallback=true;}}

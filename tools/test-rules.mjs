@@ -96,7 +96,7 @@ function playRun(seed) {
         if (!cmd) continue;
         const r = game.applyCommand(s, { ...cmd, commandId: 'probe' }, c);
         if (r.error) continue;
-        const v = rules.scoreTeam(r.state.run.team, { target: b.target, elementId: b.elementId }, r.state.run, c).score;
+        const v = game.projectedScore(r.state.run, r.state.battle, c).score;
         if (v > bestScore) { bestScore = v; best = cmd; }
       }
       if (best) run(best.type, best); else run('EndTurn');
@@ -142,3 +142,19 @@ function playRunUntilReward(seed) {
   }
   throw Error('보상 단계에 도달하지 못함');
 }
+
+test('마지막 턴 예상 점수에는 판정 직전에 더해지는 번개 누적이 포함된다', () => {
+  let s = game.initialState(), n = 0;
+  const run = (type, p = {}) => { const r = game.applyCommand(s, { type, commandId: `m${n++}`, ...p }, c); assert.equal(r.error, null); s = r.state; };
+  run('StartRun', { seed: 21 });
+  // 축적 지팡이(턴 종료 시 최고 별 Lv만큼 누적)를 든 원정대로 마지막 턴까지 간다.
+  s = structuredClone(s);
+  s.run.team.characters = [unit(0, 'human_mage', { weaponId: 'weapon_staff', elementId: 'element_lightning', elementLevel: 1, starLevel: 4 }), null, null];
+  for (let t = 1; t < c.balance.turnsPerBlind; t++) run('EndTurn');
+  const projected = game.projectedScore(s.run, s.battle, c).score;
+  const before = rules.scoreTeam(s.run.team, { target: s.battle.target, elementId: s.battle.elementId }, s.run, c).score;
+  assert.ok(projected > before, '마지막 턴 누적이 예상 점수에 들어가야 함');
+  run('EndTurn');
+  assert.equal(s.phase, 'resolve');
+  assert.equal(s.battle.lastScore.score, projected);
+});

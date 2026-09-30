@@ -52,6 +52,8 @@ function evaluateCombos(team,c,levels){
  }
  return found;
 }
+// 조합 무기 효과의 레벨별 세기. 효과 문구(화면)도 이 함수를 쓴다.
+const effectStrength=(effect,level)=>byLevel(effect.value,effect.perLevel,level);
 function recipeFor(unit,c){return c.weaponRecipes.find(r=>r.weaponId===unit.weaponId&&r.elementId===unit.elementId)??null;}
 function effectCount(effect,team,matches){
  switch(effect.condition){
@@ -72,7 +74,7 @@ function evaluateWeaponEffects(team,matches,c,levels){
  let flat=0,multiplier=1,targetPercent=0,accumulateGain=0;const effects=[];
  for(const unit of members(team)){
   const recipe=recipeFor(unit,c);if(!recipe)continue;
-  const effect=byId(c.weaponEffects,recipe.effectId),level=levelOf(levels,recipe.id),strength=byLevel(effect.value,effect.perLevel,level);
+  const effect=byId(c.weaponEffects,recipe.effectId),level=levelOf(levels,recipe.id),strength=effectStrength(effect,level);
   const count=effectCount(effect,team,matches),scale=effectScale(effect,team);
   const amount=effect.operation==='multiply'?Math.pow(strength,count):strength*count*scale;
   if(effect.operation==='multiply')multiplier*=amount;else if(effect.operation==='add')flat+=amount;else if(effect.operation==='targetPercent')targetPercent+=amount;else accumulateGain+=amount;
@@ -127,4 +129,4 @@ function drawCards(b,count){
  }
 }
 
-return {makeUnit,attachmentReason,attachUnit,levelOf,evaluateCombos,recipeFor,evaluateWeaponEffects,relationOf,evaluateAffinity,scoreTeam,turnEndGain,nextRandom,shuffle,weightedPick,drawCards};})();
+return {makeUnit,attachmentReason,attachUnit,levelOf,evaluateCombos,recipeFor,effectStrength,evaluateWeaponEffects,relationOf,evaluateAffinity,scoreTeam,turnEndGain,nextRandom,shuffle,weightedPick,drawCards};})();

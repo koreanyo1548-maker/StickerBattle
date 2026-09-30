@@ -15,7 +15,7 @@ function bestAction(s, c) {
     if (!cmd) continue;
     const r = game.applyCommand(s, { ...cmd, commandId: 'probe' }, c);
     if (r.error) continue;
-    const v = rules.scoreTeam(r.state.run.team, { target: b.target, elementId: b.elementId }, r.state.run, c).score;
+    const v = game.projectedScore(r.state.run, r.state.battle, c).score;
     if (v > bestScore) { bestScore = v; best = cmd; }
   }
   return best;
@@ -23,9 +23,11 @@ function bestAction(s, c) {
 
 export function playRun(c, seed) {
   let s = game.initialState(), n = 0;
-  const run = (type, p = {}) => { s = game.applyCommand(s, { type, commandId: `c${n++}`, ...p }, c).state; };
+  // 명령이 거절되면 상태가 그대로라 무한 반복하므로 바로 멈춘다.
+  const run = (type, p = {}) => { const r = game.applyCommand(s, { type, commandId: `c${n++}`, ...p }, c); if (r.error) throw Error(`${type} 거절: ${r.error} (seed ${seed}, phase ${s.phase})`); s = r.state; };
   run('StartRun', { seed });
-  while (s.phase !== 'run_result') {
+  for (let guard = 0; s.phase !== 'run_result'; guard++) {
+    if (guard > 1000) throw Error(`런이 끝나지 않음 (seed ${seed}, phase ${s.phase})`);
     if (s.phase === 'attach') { const a = bestAction(s, c); a ? run(a.type, a) : run('EndTurn'); }
     else if (s.phase === 'resolve') run('FinishResolution');
     else if (s.phase === 'reward_reveal') run('ShuffleRewards');

@@ -1,5 +1,6 @@
 modules["src/rendering/compositor.mjs"]=(()=>{
 const {byId}=modules["src/content/data.mjs"];
+const {recipeFor}=modules["src/domain/rules.mjs"];
 
 const cache=new Map(),images=new Map();
 const surface=()=>{const cv=document.createElement('canvas');cv.width=512;cv.height=512;return cv;};
@@ -10,7 +11,7 @@ const starTier=lv=>lv>=5?3:lv>=3?2:lv>=1?1:0;
 const glowLevel=u=>u.weaponId&&u.elementId?Math.min(u.elementLevel,4):0;
 function composeVisual(unit,c){
  const def=byId(c.characters,unit.characterDefId),profile=c.visuals[def.visualProfileId];
- const recipe=c.weaponRecipes.find(r=>r.weaponId===unit.weaponId&&r.elementId===unit.elementId);
+ const recipe=recipeFor(unit,c);
  const entries={body:profile.bodyAssetId,weapon:unit.weaponId?(recipe?.assetId??byId(c.weapons,unit.weaponId).assetId):null,hand:profile.frontHandAssetId,element:unit.elementId?byId(c.elements,unit.elementId).assetId:null};
  const result=profile.layerOrder.filter(layer=>entries[layer]).map(layer=>({layer,asset:c.assets[entries[layer]],anchor:profile.anchors[layer],unit,def}));
  const ornament=(layer,id,anchor,scale)=>({layer,asset:{...c.assets[id],scale:scale*1254/c.assets[id].sourceRect[2]},anchor,unit,def});

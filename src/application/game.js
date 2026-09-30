@@ -1,12 +1,18 @@
 modules["src/application/game.mjs"]=(()=>{
 const {byId}=modules["src/content/data.mjs"];
-const {makeUnit,attachUnit,attachmentReason,evaluateCombos,scoreTeam,turnEndGain,shuffle,weightedPick,drawCards,nextRandom}=modules["src/domain/rules.mjs"];
+const {makeUnit,attachUnit,attachmentReason,evaluateCombos,recipeFor,scoreTeam,turnEndGain,shuffle,weightedPick,drawCards,nextRandom}=modules["src/domain/rules.mjs"];
 
 // 흐름: title → (블라인드마다) attach ×6턴 → resolve → reward_reveal → reward_pick → reward_done → 다음 블라인드
 //       목표 미달이거나 마지막 블라인드를 넘기면 run_result.
 const initialState=()=>({phase:'title',run:null,battle:null,reward:null,appliedCommandIds:[],events:[],history:[]});
 const progressOf=run=>({levels:run.levels,accumulated:run.accumulated});
 const blindOf=(b)=>({target:b.target,elementId:b.elementId});
+// 지금 전투하면 판정될 점수. 마지막 턴에는 턴 종료 누적이 판정 직전에 더해지므로 미리 포함한다.
+// 화면의 예상 점수와 EndTurn의 판정이 같은 함수를 쓴다. team을 주면 그 편성으로 계산한다(미리보기용).
+function projectedScore(run,b,c,team=run.team){
+ const gain=b.turn>=c.balance.turnsPerBlind?turnEndGain(team,progressOf(run),c):0;
+ return scoreTeam(team,blindOf(b),{levels:run.levels,accumulated:run.accumulated+gain},c);
+}
 function validateAttachment(state,command,c){
  const b=state.battle;if(state.phase!=='attach'||!b)return 'phase';if(b.actionsUsed>=c.balance.attachLimit)return 'limit';
  const card=b.hand.find(x=>x.instanceId===command.stickerInstanceId);if(!card||!card.stickerDefId)return 'card';
@@ -42,7 +48,7 @@ function startBlind(s,c){
 // 보상 후보: 원정대가 든 레시피 각각 + 족보 종류. 3장을 고르고 각각 등급을 굴린다.
 function rollRewards(s,c){
  const r=s.run,rw=c.rewardRules;let seed=r.rngState;
- const recipes=[...new Set(r.team.characters.filter(Boolean).map(u=>c.weaponRecipes.find(x=>x.weaponId===u.weaponId&&x.elementId===u.elementId)?.id).filter(Boolean))];
+ const recipes=[...new Set(r.team.characters.filter(Boolean).map(u=>recipeFor(u,c)?.id).filter(Boolean))];
  const candidates=[...recipes.map(key=>({type:'recipe',key})),...rw.comboKinds.map(key=>({type:'combo',key}))];
  const sh=shuffle(candidates,seed);seed=sh.seed;
  const offers=sh.list.slice(0,rw.offerCount).map((o,k)=>{const g=weightedPick(rw.grades,seed);seed=g.seed;return {id:`${r.runId}:reward:${r.blindIndex}:${k}`,...o,grade:g.item.id,levels:g.item.levels};});
@@ -91,12 +97,13 @@ function applyCommand(state,cmd,c){
  }
  case 'EndTurn':{
   if(s.phase!=='attach')return fail('phase');
-  const b=s.battle,r=s.run,gain=turnEndGain(r.team,progressOf(r),c);
+  const b=s.battle,r=s.run,last=b.turn>=c.balance.turnsPerBlind;
+  // 마지막 턴은 누적을 더하기 전 상태로 판정 점수를 구한다(projectedScore가 누적을 포함한다).
+  const res=last?projectedScore(r,b,c):null,gain=turnEndGain(r.team,progressOf(r),c);
   if(gain>0){r.accumulated+=gain;s.events.push({type:'Accumulated',gain,total:r.accumulated});}
   b.discardPile.push(...b.hand.filter(x=>x.stickerDefId));b.hand=[];
-  if(b.turn<c.balance.turnsPerBlind){s.events.push({type:'TurnEnded',turn:b.turn});beginTurn(s,c);break;}
+  if(!last){s.events.push({type:'TurnEnded',turn:b.turn});beginTurn(s,c);break;}
   // 마지막 턴: 목표 점수 판정.
-  const res=scoreTeam(r.team,blindOf(b),progressOf(r),c);
   b.lastScore=res;b.outcome=res.score>=b.target?'win':'lose';r.rngState=b.rngState;s.phase='resolve';
   s.history.push({blindIndex:b.blindIndex,target:b.target,score:res.score,outcome:b.outcome});
   s.events.push({type:'BlindResolved',score:res.score,target:b.target,outcome:b.outcome});break;
@@ -126,4 +133,4 @@ function applyCommand(state,cmd,c){
  s.appliedCommandIds.push(cmd.commandId);return {state:s,error:null,events:s.events};
 }
 
-return {initialState,validateAttachment,validatePlacement,placeUnit,applyCommand};})();
+return {initialState,projectedScore,applyCommand};})();

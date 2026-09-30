@@ -1,7 +1,7 @@
 modules["src/presentation/main.mjs"]=(()=>{
 const {content,byId,nameOf,validateContent}=modules["src/content/data.mjs"];
-const {makeUnit,attachUnit,recipeFor,evaluateCombos,scoreTeam,relationOf,levelOf}=modules["src/domain/rules.mjs"];
-const {initialState,applyCommand,validateAttachment,validatePlacement,placeUnit}=modules["src/application/game.mjs"];
+const {makeUnit,recipeFor,evaluateCombos,effectStrength,relationOf,levelOf}=modules["src/domain/rules.mjs"];
+const {initialState,projectedScore,applyCommand}=modules["src/application/game.mjs"];
 const {renderCharacter}=modules["src/rendering/compositor.mjs"];
 
 validateContent();
@@ -35,22 +35,30 @@ function comboChanges(before,after){
 }
 // 조합 무기 효과 문장. level을 주면 그 레벨의 수치로 쓴다.
 function effectDescription(recipe,level=1){
- const e=byId(c.weaponEffects,recipe.effectId),s=number(e.value+e.perLevel*(level-1));
+ const e=byId(c.weaponEffects,recipe.effectId),s=number(effectStrength(e,level));
  const cond=e.condition==='combo'?`${axisLabels[e.axis]} ${comboLabels[e.kinds[0]]}${e.kinds.length>1?' 이상':''}이면 `:e.condition==='completeAxes'?`${e.axes.map(a=>axisLabels[a]).join('·')}의 컬렉션·트리플마다 `:e.condition==='collections'?'컬렉션·스트레이트마다 ':e.condition==='starBalance'?`3명의 별 Lv 차이가 ${e.maxGap} 이하면 `:'';
  const scale=e.scaleBy==='starLevelSum'?'별 Lv 합×':e.scaleBy==='maxStarLevel'?'최고 별 Lv×':'';
  const what=e.operation==='multiply'?`배율 ×${s}`:e.operation==='add'?`기초 +${scale}${s}`:e.operation==='targetPercent'?`최종 점수 + 목표의 ${s}%`:`누적 +${scale}${s}`;
  return `${e.operation==='accumulate'?'턴 종료 시 ':''}${cond}${what}`;
 }
 function effectKind(recipe){const op=byId(c.weaponEffects,recipe.effectId).operation;return op==='multiply'?'mul':op==='accumulate'?'acc':'add';}
-const blindOf=b=>({target:b.target,elementId:b.elementId});
-function reading(){const b=state.battle;return state.phase==='attach'?scoreTeam(state.run.team,blindOf(b),state.run,c):b.lastScore;}
+// 점수 계산은 상태가 바뀔 때만 한다. 한 번의 렌더와 드래그 중 미리보기가 같은 결과를 재사용한다.
+let memoState=null,memoReading=null;const memoPreview=new Map();
+function syncMemo(){if(memoState!==state){memoState=state;memoReading=null;memoPreview.clear();}}
+function reading(){syncMemo();return memoReading??=state.phase==='attach'?projectedScore(state.run,state.battle,c):state.battle.lastScore;}
+// 미리보기는 실제 명령을 상태 사본에 적용해 본다(dry run). 규칙이 바뀌어도 화면과 엔진이 어긋나지 않는다.
 function previewFor(slot,cardId){
- const b=state.battle,card=b.hand.find(x=>x.instanceId===cardId);if(!card)return {reason:'card'};
- const team=structuredClone(state.run.team),old=team.characters[slot];let unit,def=null;
- if(card.characterDefId){const reason=validatePlacement(state,{cardInstanceId:cardId,targetSlot:slot},c);if(reason)return {reason};unit=placeUnit(old,slot,card.characterDefId);}
- else{if(!old)return {reason:'target'};const reason=validateAttachment(state,{stickerInstanceId:cardId,targetInstanceId:old.instanceId},c);if(reason)return {reason};def=byId(c.stickers,card.stickerDefId);unit=attachUnit(old,def,c).unit;}
- team.characters[slot]=unit;
- return {reason:null,reading:scoreTeam(team,blindOf(b),state.run,c),unit,old,def,card,before:evaluateCombos(state.run.team,c,state.run.levels),after:evaluateCombos(team,c,state.run.levels)};
+ syncMemo();const key=slot+'|'+cardId;if(memoPreview.has(key))return memoPreview.get(key);
+ const b=state.battle,card=b.hand.find(x=>x.instanceId===cardId),old=state.run.team.characters[slot];let result;
+ if(!card)result={reason:'card'};
+ else if(!card.characterDefId&&!old)result={reason:'target'};
+ else{
+  const cmd=card.characterDefId?{type:'PlaceCharacter',cardInstanceId:cardId,targetSlot:slot}:{type:'AttachSticker',stickerInstanceId:cardId,targetInstanceId:old.instanceId};
+  const r=applyCommand(state,{...cmd,commandId:'preview'},c);
+  if(r.error)result={reason:r.error};
+  else{const team=r.state.run.team;result={reason:null,reading:projectedScore(state.run,b,c,team),unit:team.characters[slot],old,def:card.stickerDefId?byId(c.stickers,card.stickerDefId):null,card,before:evaluateCombos(state.run.team,c,state.run.levels),after:evaluateCombos(team,c,state.run.levels)};}
+ }
+ memoPreview.set(key,result);return result;
 }
 
 // 커맨드 실행 전후 상태를 비교해 연출 정보를 만든다. 도메인 상태는 건드리지 않는다.
@@ -65,7 +73,7 @@ function buildFx(type,prev,next,events){
  if(type==='AttachSticker'||type==='PlaceCharacter'){
   const slot=type==='PlaceCharacter'?events.find(e=>e.slot!==undefined).slot:prev.run.team.characters.findIndex(u=>u?.instanceId===events[0].targetInstanceId);
   f.attached=slot;
-  f.delta=scoreTeam(next.run.team,blindOf(next.battle),next.run,c).score-scoreTeam(prev.run.team,blindOf(prev.battle),prev.run,c).score;
+  f.delta=projectedScore(next.run,next.battle,c).score-projectedScore(prev.run,prev.battle,c).score;
   f.changes=comboChanges(evaluateCombos(prev.run.team,c,prev.run.levels),evaluateCombos(next.run.team,c,next.run.levels));
   for(const e of events){
    if(e.type==='CharacterPlaced')f.changes.unshift({text:`${nameOf(e.characterDefId)} 합류!`,gain:true});
@@ -111,7 +119,7 @@ function blindZone(){
  const fill=Math.min(100,score/b.target*100),next=elementOf(b.nextElementId);
  const risk=next?members(state.run.team).filter(u=>relationOf(u.elementId,next.id,c)==='disadvantage').length:0;
  return `<section class="blind-zone ${b.boss?'boss':''}" id="blind-zone"><div class="monster-slot" aria-hidden="true">${ic(m.assetId,'monster-art')}</div>
- <div class="blind-info"><div class="blind-name"><strong>${nameOf(m.nameKey)}</strong>${b.boss?'<em class="boss-tag">보스</em>':''}${elementChip(b.elementId)}</div>
+ <div class="blind-info"><div class="blind-name"><strong>${nameOf(m.nameKey)}</strong>${b.boss?'<em class="boss-tag">보스</em>':''}<button type="button" class="el-btn" data-action="affinity" aria-label="상성 설명 보기">${elementChip(b.elementId)}</button></div>
  <div class="target-row"><small>목표</small><b id="target">${b.target}</b></div>
  <div class="target-gauge" aria-label="예상 점수 ${score} / 목표 ${b.target}"><i id="gauge" style="width:${fill}%"></i><span class="gauge-mark"></span></div>
  ${next?`<div class="next-blind">다음 블라인드 ${elementChip(next.id)}${risk?`<span class="risk">불리 ${risk}명</span>`:''}</div>`:'<div class="next-blind">마지막 블라인드</div>'}</div></section>`;
@@ -123,8 +131,9 @@ function scoreBoard(){
  <div class="duel-foot"><span class="foe">${r.targetBonus?`목표 보너스 <b>+${r.targetBonus}</b>`:''}</span><span class="verdict ${gap>=0?'good':'bad'}" id="verdict">${gap>=0?`목표 달성 +${gap}`:`목표까지 ${-gap}`}</span></div>
  <div class="preview-line" id="preview-line"></div></button>`;
 }
-function unitBadges(u,b){
- const e=elementOf(u.elementId),rel=relationOf(u.elementId,b.elementId,c),nextRel=b.nextElementId?relationOf(u.elementId,b.nextElementId,c):'neutral';
+// final: 원정이 끝난 뒤라 상성·다음 블라인드 경고를 표시하지 않는다.
+function unitBadges(u,b,final=false){
+ const e=elementOf(u.elementId),rel=final?'neutral':relationOf(u.elementId,b.elementId,c),nextRel=!final&&b.nextElementId?relationOf(u.elementId,b.nextElementId,c):'neutral';
  const star=u.starLevel?`<span class="lv-star" title="별 Lv${u.starLevel}">★${u.starLevel}</span>`:'';
  const el=e?`<span class="lv-el ${rel}" style="--el:${e.color}" title="${nameOf(e.id)} Lv${u.elementLevel}">${ic(e.assetId)}<b>${u.elementLevel}</b>${rel!=='neutral'?`<i class="rel">${relationMark[rel]}</i>`:''}</span>`:'';
  const warn=nextRel==='disadvantage'?'<span class="lv-warn" title="다음 블라인드에서 불리">!</span>':'';
@@ -235,7 +244,7 @@ function renderRunResult(){
  const win=state.run.result==='win',h=state.history;
  return stageTop()+`<main class="result"><h2 class="${win?'':'lose'}">${win?'원정 성공':'원정 실패'}</h2><p class="lead">${win?`${c.blinds.length}개의 블라인드를 모두 넘겼어요.`:`블라인드 ${h.length}에서 목표를 넘지 못했어요.`}</p>
  <table class="table history">${h.map(x=>`<tr class="${x.outcome}"><td>블라인드 ${x.blindIndex+1}</td><td>${x.score} / 목표 ${x.target}</td></tr>`).join('')}</table>
- <div class="party">${members(state.run.team).map(u=>`<div class="punit static">${unitBadges(u,state.battle)}<canvas data-render="${u.instanceId}"></canvas><span class="uname">${nameOf(u.characterDefId)}</span></div>`).join('')}</div></main><footer class="dock"><button type="button" class="go" data-action="restart">다시 원정</button></footer>`;
+ <div class="party">${members(state.run.team).map(u=>`<div class="punit static">${unitBadges(u,state.battle,true)}<canvas data-render="${u.instanceId}"></canvas><span class="uname">${nameOf(u.characterDefId)}</span></div>`).join('')}</div></main><footer class="dock"><button type="button" class="go" data-action="restart">다시 원정</button></footer>`;
 }
 
 /* ── 렌더 ── */
@@ -276,7 +285,6 @@ function snapshotCard(el){if(!el)return null;const node=el.cloneNode(true);el.qu
 function decorateUnits(){
  state.run?.team.characters.forEach((u,slot)=>{
   if(!u)return;const el=app.querySelector(`canvas[data-render="${u.instanceId}"]`)?.closest('.punit');if(!el)return;
-  el.dataset.rank=String(u.starLevel>=5?3:u.starLevel>=3?2:u.starLevel>=1?1:0);
   if(!u.elementId||u.elementLevel<3)return;
   const color=elementOf(u.elementId).color,field=document.createElement('span');
   field.className='element-fx '+u.elementId.replace('element_','')+(u.weaponId?'':' body-fx');field.setAttribute('aria-hidden','true');field.style.setProperty('--element-color',color);field.innerHTML='<i></i><i></i><i></i>';el.append(field);
@@ -393,10 +401,15 @@ function preview(target){
 /* ── 바텀시트 ── */
 function openInfo(html){document.getElementById('info-content').innerHTML=html;const d=document.getElementById('info');if(!d.open)d.showModal();}
 function cycleText(){const m=c.affinity.beats,start=Object.keys(m)[0];let k=start,s=[nameOf(k)];do{k=m[k];s.push(nameOf(k));}while(k!==start);return s.join(' > ');}
+// 캐릭터 카드 확정 턴 설명. 콘텐츠의 guaranteedTurns에서 만든다.
+function guaranteedText(){
+ const g=c.characterRules.guaranteedTurns,t=ts=>ts.length>1?`${ts[0]}~${ts[ts.length-1]}턴`:`${ts[0]}턴`,rest=g.slice(1).map(t);
+ return rest.every(x=>x===rest[0])?`블라인드 1은 ${t(g[0])}, 이후 블라인드는 ${rest[0]}에`:g.map((ts,i)=>`블라인드 ${i+1}은 ${t(ts)}`).join(', ')+'에';
+}
 function showRules(){const t=c.balance;openInfo(`<h2>원정 규칙</h2><ol>
 <li>원정은 블라인드 ${c.blinds.length}개. 블라인드마다 ${t.turnsPerBlind}턴을 진행하고, 마지막 턴이 끝나면 점수가 목표 이상인지 판정해요. 못 넘기면 원정이 끝나요.</li>
 <li>매 턴 손패 ${t.handSize}장을 받고 최대 ${t.attachLimit}번 붙여요. 남은 카드는 턴 종료 때 버려져요.</li>
-<li>블라인드 첫 턴(블라인드 1은 1~3턴)에는 캐릭터 카드가 꼭 나오고, 다른 턴에도 가끔 나와요. 빈 자리에 놓거나 교체할 수 있고, 교체해도 스티커와 레벨은 옮겨져요.</li>
+<li>${guaranteedText()} 캐릭터 카드가 꼭 나오고, 다른 턴에도 가끔 나와요. 빈 자리에 놓거나 교체할 수 있고, 교체해도 스티커와 레벨은 옮겨져요.</li>
 <li><b>별</b>: 붙일 때마다 Lv+1. 캐릭터 기초 점수가 Lv당 +${t.starPower}.</li>
 <li><b>속성</b>: 같은 속성을 붙이면 Lv+1, 다른 속성을 붙이면 교체되고 Lv1부터 다시 시작해요.</li>
 <li><b>무기</b>: 기초 +${t.weaponPower}. 무기와 속성이 함께 있으면 조합 무기가 돼요.</li>

@@ -104,6 +104,7 @@ function validateContent(c=content){
  check(byId(c.monsters,c.bossMonsterId),'보스 몬스터');
  check(c.elements.every(e=>c.monsters.some(m=>m.elementId===e.id)),'속성별 몬스터');
  for(const [k,v] of Object.entries(c.affinity.beats))check(byId(c.elements,k)&&byId(c.elements,v),'상성 참조');
+ {const b=c.affinity.beats,seen=new Set();let k=c.elements[0].id;while(k&&!seen.has(k)){seen.add(k);k=b[k];}check(k===c.elements[0].id&&seen.size===c.elements.length,'상성은 모든 속성을 한 바퀴 도는 순환');}
  check(c.characterRules.guaranteedTurns.length===c.balance.blindCount&&c.characterRules.guaranteedTurns.every(ts=>ts.every(t=>Number.isInteger(t)&&t>=1&&t<=c.balance.turnsPerBlind))&&c.characterRules.randomChance>=0&&c.characterRules.randomChance<=1,'캐릭터 카드 규칙');
  const rw=c.rewardRules;
  check(rw.offerCount===3&&rw.grades.every(g=>Number.isInteger(g.weight)&&g.weight>0&&Number.isInteger(g.levels)&&g.levels>0)&&rw.comboKinds.every(k=>c.comboLevelKinds.includes(k)),'보상 규칙');

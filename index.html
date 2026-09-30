@@ -8,7 +8,7 @@ button:disabled{cursor:default;opacity:.45}
 button:focus-visible{outline:3px solid var(--gold);outline-offset:3px}
 h2,p{margin:0}
 canvas{-webkit-user-select:none;user-select:none;pointer-events:none}
-#app{position:relative;max-width:480px;margin:0 auto;height:100dvh;display:flex;flex-direction:column;overflow:hidden;background:linear-gradient(#1f1830e6,#1a1429f7),var(--art-background) center/cover}
+#app{position:relative;max-width:480px;margin:0 auto;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
 main{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 10px 10px;display:flex;flex-direction:column;gap:8px}
 
 /* 상단 바 */
@@ -25,36 +25,13 @@ main{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 10px 10px;d
 /* 체력 */
 .zone-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px}
 .zone-head strong{font-size:15px;white-space:nowrap}
-.hp{display:flex;align-items:center;gap:6px;flex:1;max-width:190px;position:relative}
-.hp-track{flex:1;height:10px;border-radius:6px;background:#0d0916;overflow:hidden;box-shadow:inset 0 0 0 1px #ffffff14}
-.hp-track i{display:block;height:100%;border-radius:6px;transition:width .7s cubic-bezier(.3,1.3,.5,1)}
-.hp.player i{background:var(--ok)}.hp.enemy i{background:var(--bad)}
-.hp b{font-family:var(--disp);font-size:16px;min-width:22px;text-align:right}.hp small{color:var(--muted);font-size:11px;margin-left:-4px}
-
-/* 상대 */
-.enemy-zone{position:relative;background:#2a1a2ecc;border:1px solid #5b3a52;border-radius:16px;padding:8px 10px 6px}
-.enemy-row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-.eunit{position:relative;display:flex;flex-direction:column;align-items:center}
-.eunit canvas{width:64px;height:64px}
-.eunit .gear{right:8px}
-.eunit .g{width:20px;height:20px}.eunit .g .ic{width:16px;height:16px}
-.eunit .pips i{width:11px;height:11px}
-.mini-combos{display:flex;flex-wrap:wrap;gap:4px;justify-content:center;min-height:18px;margin-top:3px}
-.mini-combos span{font-size:11px;color:#f1c2b8;background:#ffffff10;border-radius:6px;padding:2px 6px}
-.mini-combos .gold{color:var(--ink);background:var(--gold)}
-.enemy-move{position:absolute;left:10px;right:10px;bottom:-14px;z-index:5;background:var(--bad);color:#fff;border-radius:10px;padding:6px 10px;font-size:13px;text-align:center;box-shadow:0 4px 12px #0007;animation:drop .35s}
-.eunit.moved canvas{animation:slap .5s}
 
 /* 장착 배지 */
 .ic{display:inline-block;background:center/contain no-repeat;flex-shrink:0}
-.gear{position:absolute;top:0;right:4px;display:flex;flex-direction:column;gap:4px;z-index:2}
 .g{position:relative;width:24px;height:24px;border-radius:50%;background:var(--paper);box-shadow:0 0 0 2px #fff,0 2px 0 #0006;display:grid;place-items:center}
 .g .ic{width:20px;height:20px}
 .g.el{background:color-mix(in srgb,var(--el) 35%,var(--paper))}
 .g b{position:absolute;right:-7px;bottom:-5px;background:var(--el);color:#fff;font-size:10px;min-width:15px;height:15px;border-radius:8px;display:grid;place-items:center;font-family:var(--disp);box-shadow:0 0 0 1.5px #fff}
-.pips{display:flex;gap:2px;justify-content:center;margin-top:1px}
-.pips i{width:14px;height:14px;background:#ffffff26;clip-path:polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%)}
-.pips i.on{background:var(--gold)}
 
 /* 점수 대결 패널 */
 .duel{position:relative;display:block;width:100%;text-align:left;background:var(--deep);border-radius:18px;padding:10px 10px 8px;box-shadow:inset 0 0 0 2px #ffffff10,0 6px 20px #0006}
@@ -87,8 +64,6 @@ main{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 10px 10px;d
 .punit.no{opacity:.45}
 .punit.hover{border-color:var(--gold);transform:translateY(-4px);background:#f5c64b1c}
 .punit.slap canvas{animation:slap .5s}
-.pow{position:absolute;top:4px;left:4px;z-index:2;min-width:26px;height:26px;border-radius:9px;background:var(--paper);color:var(--ink);font-family:var(--disp);font-size:15px;display:grid;place-items:center;padding:0 4px;box-shadow:0 2px 0 #0006}
-.punit .gear{top:4px;right:4px}
 .uname{font-size:13px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .recipe{margin-top:3px;font-size:11px;padding:2px 7px;border-radius:7px;background:#ffffff14;color:var(--muted);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .recipe.on{background:var(--mult);color:#fff}
@@ -98,15 +73,13 @@ main{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 10px 10px;d
 
 /* 족보 트레이 */
 .tray{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;width:100%}
-.axis,.compound{background:#ffffff0c;border-radius:10px;padding:4px 1px;text-align:center;display:flex;flex-direction:column;align-items:center;min-width:0;border:1px solid transparent}
-.axis small,.compound small{font-size:10px;color:var(--muted)}
+.axis{background:#ffffff0c;border-radius:10px;padding:4px 1px;text-align:center;display:flex;flex-direction:column;align-items:center;min-width:0;border:1px solid transparent}
+.axis small{font-size:10px;color:var(--muted)}
 .axis b{font-size:11px;letter-spacing:-.4px;color:#ffffff55;white-space:nowrap;font-weight:400}
-.axis em,.compound em{font-style:normal;font-family:var(--disp);font-size:13px;min-height:16px;color:#8fc0ff}
+.axis em{font-style:normal;font-family:var(--disp);font-size:13px;min-height:16px;color:#8fc0ff}
 .axis.part{background:#3a86d826}.axis.part b{color:#cfe3ff}
 .axis.full{background:#f5c64b26;border-color:#f5c64b99}.axis.full b,.axis.full em{color:var(--gold)}
 .axis.burst{animation:pop .5s}
-.compound .dots{display:flex;gap:3px;margin:3px 0}.compound .dots i{width:8px;height:8px;border-radius:50%;background:#ffffff26}.compound .dots i.on{background:var(--gold)}
-.compound.on{background:var(--gold)}.compound.on small,.compound.on em{color:var(--ink)}.compound.on .dots i.on{background:var(--ink)}
 
 /* 하단 도크 */
 .dock{flex-shrink:0;background:#120d1cf2;border-radius:20px 20px 0 0;padding:8px 12px calc(12px + env(safe-area-inset-bottom,0px));box-shadow:0 -8px 24px #0006;display:flex;flex-direction:column;gap:8px;position:relative;z-index:4}
@@ -136,42 +109,22 @@ main{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 10px 10px;d
 .steps{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px;justify-content:center;min-height:64px;align-content:center}
 .steps li{font-size:13px;padding:5px 9px;border-radius:9px;background:#ffffff12;transition:opacity .2s}
 .steps li b{font-family:var(--disp);font-weight:400;margin-left:5px}
-.steps li.add{background:#3a86d840}.steps li.mul{background:#e0473b55}.steps li.grow{background:#5fc48c2e}
+.steps li.add{background:#3a86d840}.steps li.mul{background:#e0473b55}
 .steps li.off{opacity:.35;text-decoration:line-through}
 .steps li.pending{opacity:.15}.steps li.hit{animation:pop .35s}
 .skip-hint{text-align:center;font-size:12px;color:var(--muted)}
-
-/* 승패 오버레이 */
-.over{position:absolute;inset:0;z-index:20;background:#0b0714d0;display:grid;place-items:center;padding:24px;animation:fade .3s}
-.over-card{text-align:center;display:flex;flex-direction:column;gap:14px;align-items:center}
-.over h2{font-family:var(--disp);font-weight:400;font-size:64px;line-height:1;color:var(--gold);text-shadow:0 5px 0 #7a5410;animation:slam .6s}
-.over.lose h2{color:var(--bad);text-shadow:0 5px 0 #6e1f16}.over.draw h2{color:var(--paper);text-shadow:0 5px 0 #0008}
-.over p{color:var(--muted);font-size:15px;line-height:1.6}
-.over .go{min-width:230px;flex:none}
 
 /* 연출 */
 .burst{position:absolute;left:50%;top:44%;z-index:30;transform:translate(-50%,-50%);font-family:var(--disp);font-size:30px;color:var(--gold);text-shadow:0 3px 0 #7a5410,0 0 18px #f5c64b88;white-space:nowrap;pointer-events:none;animation:burst 1.1s forwards}
 .burst.loss{color:var(--bad);text-shadow:0 3px 0 #6e1f16;font-size:22px}
 .floater{position:absolute;left:50%;top:30%;z-index:6;font-family:var(--disp);font-size:26px;pointer-events:none;animation:floatup 1s forwards;transform:translateX(-50%);white-space:nowrap}
 .floater.up{color:var(--ok);text-shadow:0 2px 0 #0a2a18}.floater.down{color:var(--bad);text-shadow:0 2px 0 #3a0c07}
-.hp .floater{top:-10px;font-size:22px}
 .turn-banner{position:absolute;left:0;right:0;top:40%;z-index:25;text-align:center;font-family:var(--disp);font-size:44px;color:var(--paper);text-shadow:0 4px 0 #0008;pointer-events:none;animation:banner 1s forwards}
 .turn-banner small{display:block;font-family:var(--ui);font-size:16px;color:var(--muted);text-shadow:none}
 .bump{animation:bump .3s}.bump.big{animation:bumpbig .45s}
 .slam{animation:slam .45s}
 #app.quake,section.hurt{animation:quake .35s}
-
-/* 편성 */
-.roster{gap:10px}
-.slots{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .slot{height:116px;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#ffffff0a;border:2px dashed var(--line);color:var(--muted);font-family:var(--disp);font-size:26px}
-.slot.filled{background:var(--felt);border:2px solid var(--gold);font-family:var(--ui);font-size:13px;color:var(--paper)}
-.slot.filled canvas{width:84px;height:84px}
-.roster-combos{display:flex;flex-wrap:wrap;gap:5px;justify-content:center;min-height:24px;align-items:center}
-.chip{background:var(--chip);border-radius:8px;padding:3px 8px;font-size:12px}
-.dim{color:var(--muted);font-size:13px}
-.pool{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-.pool-head{text-align:center;font-size:12px;color:var(--muted);padding-top:2px}
 .pick{background:#ffffff0a;border:2px solid transparent;border-radius:14px;padding:4px 2px 6px;display:flex;flex-direction:column;align-items:center;font-size:13px}
 .pick canvas{width:72px;height:72px}
 .pick.on{border-color:var(--gold);background:#f5c64b1a}
@@ -181,11 +134,6 @@ main{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 10px 10px;d
 .reward h2,.result h2{font-family:var(--disp);font-weight:400;font-size:34px;color:var(--gold);text-shadow:0 3px 0 #7a5410}
 .result h2.lose{color:var(--bad);text-shadow:0 3px 0 #6e1f16}
 .lead{color:var(--muted);font-size:14px;line-height:1.6}
-.reward-hand{display:flex;justify-content:center;gap:10px;padding:20px 0 8px}
-.reward-hand .sticker{min-height:150px}
-.reward-hand .sicon{width:72px;height:64px}
-.deck-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;padding:8px 4px}
-.deck-grid .sticker{width:auto;max-width:none;min-height:104px}
 .next-foe{background:#2a1a2ecc;border:1px solid #5b3a52;border-radius:16px;padding:16px}
 .next-foe small{display:block;color:var(--muted);font-size:12px;margin-bottom:4px}.next-foe b{font-family:var(--disp);font-weight:400;font-size:26px;color:var(--bad)}
 .punit.static{cursor:default}
@@ -224,16 +172,12 @@ dialog form{margin-top:16px;display:flex}
 @keyframes slam{0%{transform:scale(2.2);opacity:0}60%{transform:scale(.92);opacity:1}100%{transform:scale(1)}}
 @keyframes quake{20%{transform:translate(-4px,2px)}40%{transform:translate(4px,-2px)}60%{transform:translate(-3px,1px)}80%{transform:translate(2px,-1px)}}
 @keyframes blaze{50%{color:#fff3c4;text-shadow:0 3px 0 #7a5410,0 0 22px #ff9a3c}}
-@keyframes drop{from{transform:translateY(-8px);opacity:0}}
-@keyframes fade{from{opacity:0}}
 @keyframes sheet{from{transform:translateY(40px);opacity:0}}
-@media(max-height:720px){.punit canvas{max-width:86px}.eunit canvas{width:52px;height:52px}.formula b{font-size:24px}.score b{font-size:34px}.hand{min-height:104px;padding-top:10px}.sticker{min-height:96px;padding-top:6px}.sicon{height:40px}.pick canvas{width:60px;height:60px}}
+@media(max-height:720px){.punit canvas{max-width:86px}.formula b{font-size:24px}.score b{font-size:34px}.hand{min-height:104px;padding-top:10px}.sticker{min-height:96px;padding-top:6px}.sicon{height:40px}.pick canvas{width:60px;height:60px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 
 main.battle{justify-content:space-between}
-.stack{position:absolute;top:6px;right:6px;z-index:2;background:var(--el);color:#fff;font-family:var(--disp);font-size:13px;line-height:1;padding:4px 7px;border-radius:8px;box-shadow:0 0 0 2px #fff,0 2px 0 #0006}
-.eunit .stack{top:0;right:10px;font-size:11px;padding:3px 5px}
-@media(max-height:760px){.top{padding:6px 12px 4px}main{gap:6px}.enemy-zone{padding:6px 10px 4px}.eunit canvas{width:46px;height:46px}.mini-combos{min-height:0}.duel{padding:8px 8px 6px}.formula b{font-size:22px}.score b{font-size:30px}.duel-foot{margin-top:6px}.punit canvas{max-width:72px}.recipe{margin-top:1px}.dock{padding-top:6px;gap:6px}.hand{min-height:96px;padding-top:14px}.sticker{min-height:86px;padding-top:6px}.sicon{width:48px;height:36px}.sname{font-size:14px}.go{padding:10px 14px;font-size:20px}}
+@media(max-height:760px){.top{padding:6px 12px 4px}main{gap:6px}.duel{padding:8px 8px 6px}.formula b{font-size:22px}.score b{font-size:30px}.duel-foot{margin-top:6px}.punit canvas{max-width:72px}.recipe{margin-top:1px}.dock{padding-top:6px;gap:6px}.hand{min-height:96px;padding-top:14px}.sticker{min-height:86px;padding-top:6px}.sicon{width:48px;height:36px}.sname{font-size:14px}.go{padding:10px 14px;font-size:20px}}
 /* 캐릭터 카드 */
 .sticker.k-char{background:linear-gradient(#efe4fb,#fbf4e4 70%)}
 .ccanvas{width:58px;height:58px;margin-top:-4px}
@@ -243,9 +187,6 @@ main.battle{justify-content:space-between}
 .punit.vacant.ok{border-style:solid}
 .vacant-mark{font-family:var(--disp);font-size:44px;line-height:1;color:var(--line)}
 .punit.vacant.ok .vacant-mark{color:var(--ok)}
-.eunit.empty-e{justify-content:center;min-height:82px;color:#8d6f86}
-.qmark{font-family:var(--disp);font-size:30px;line-height:1.2}
-.empty-e small{font-size:11px}
 /* 타이틀 */
 .title{gap:14px;padding-top:6px}
 .title-art{display:flex;justify-content:center;gap:4px}
@@ -257,38 +198,8 @@ main.battle{justify-content:space-between}
 .flow b{font-family:var(--disp);font-weight:400;font-size:18px;color:var(--gold);white-space:nowrap;min-width:64px}
 .flow span{font-size:14px;line-height:1.5}
 .note-dark{font-size:13px;color:var(--muted);text-align:center;line-height:1.6}
-@media(max-height:760px){.punit.vacant{min-height:120px}.eunit.empty-e{min-height:62px}.ccanvas{width:44px;height:44px}.title-art canvas{width:84px;height:84px}}
-/* 속성 배지 */
-.gear2{position:absolute;top:4px;right:4px;z-index:2;display:flex;flex-direction:column;gap:3px;align-items:flex-end}
-.eb{position:relative;display:flex;align-items:center;gap:2px;background:color-mix(in srgb,var(--el) 30%,var(--paper));color:var(--ink);border-radius:9px;padding:1px 5px 1px 2px;box-shadow:0 0 0 1.5px #fff,0 2px 0 #0005}
-.eb .ic{width:16px;height:16px}
-.eb small{font-size:9px}
-.eb b{background:var(--el);color:#fff;font-family:var(--disp);font-weight:400;font-size:10px;min-width:14px;height:14px;border-radius:7px;display:grid;place-items:center;margin-left:1px}
-.eb.body{border-radius:50% 9px 9px 50%}
-.eb.pending{opacity:.55;filter:grayscale(.6)}
-.eunit .gear2{right:6px}.eunit .eb small{display:none}.eunit .eb{padding:1px 3px 1px 1px}.eunit .eb .ic{width:13px;height:13px}
-/* 속성 칸 선택 */
-.punit.split{padding-bottom:6px}
-.ez{position:absolute;left:0;right:0;z-index:4;display:flex;align-items:center;justify-content:center;gap:6px;background:#1f183099;border:2px solid transparent;font-size:13px}
-.ez.top{top:0;height:50%;border-radius:14px 14px 0 0;border-bottom:1px dashed #ffffff40}
-.ez.bottom{bottom:0;height:50%;border-radius:0 0 14px 14px}
-.ez.ok:hover,.ez.hover{background:#f5c64b33;border-color:var(--gold)}
-.ez.no{opacity:.6}
-.ez-l{background:#000a;padding:2px 7px;border-radius:7px}
-.zd{font-family:var(--disp);font-size:15px;padding:1px 8px;border-radius:999px;background:var(--felt)}
-.zd.up{background:var(--ok);color:#0d2a1b}.zd.down{background:var(--bad);color:#fff}.zd.no{font-family:var(--ui);font-size:11px;background:#000a}
-/* 상성 표시줄 */
-.aff{display:grid;grid-template-columns:auto repeat(3,1fr);gap:4px;align-items:stretch;width:100%}
-.aff-title{align-self:center;font-size:12px;color:var(--muted);writing-mode:vertical-rl;letter-spacing:2px}
-.aff-axis{background:#ffffff0c;border-radius:10px;padding:3px 2px;display:flex;flex-direction:column;align-items:center;border:1px solid transparent}
-.aff-axis small{font-size:10px;color:var(--muted)}
-.aff-axis b{font-family:var(--disp);font-weight:400;font-size:16px;line-height:1.1}
-.aff-axis em{font-style:normal;font-size:10px;color:#f1c2b8}
-.aff-axis.win{background:#5fc48c1f;border-color:#5fc48c80}.aff-axis.win b{color:#9ff0c2}
-.aff-axis.lose{background:#ef6a5b1a;border-color:#ef6a5b70}.aff-axis.lose b{color:#ffb3a8}
-.mult-sub{display:block;font-style:normal;font-size:9px;line-height:1.15;opacity:.9;white-space:normal;word-break:keep-all}
+@media(max-height:760px){.punit.vacant{min-height:120px}.ccanvas{width:44px;height:44px}.title-art canvas{width:84px;height:84px}}
 .steps li.aff-step{background:#5fc48c40}
-@media(max-height:760px){.aff-axis b{font-size:14px}.aff-axis{padding:2px}}
 
 /* 스티커북 아트 방향: 잉크색 바탕, 크림색 종이, 금박 포인트. */
 #app{background:radial-gradient(ellipse at 50% 15%,#59447066,transparent 65%),linear-gradient(#211a30d9,#171221ee),var(--art-background) center/cover;border-inline:1px solid #77628540}
@@ -297,21 +208,19 @@ main.battle{justify-content:space-between}
 .title{justify-content:center;gap:18px;padding:18px 20px 24px;background:radial-gradient(ellipse at 50% 20%,#f5c64b16,transparent 60%)}
 .title-art{position:relative;padding:28px 0 20px;border-bottom:1px solid #f5c64b33}.title-art:before{content:'STICKER COLLECTION';position:absolute;top:0;font-size:10px;letter-spacing:4px;color:#d5bfa1}.title-art canvas{width:30%;height:auto;aspect-ratio:1;filter:drop-shadow(0 12px 7px #0005);animation:idle 4s ease-in-out infinite}.title-art canvas:nth-child(2){animation-delay:-1.3s}.title-art canvas:nth-child(3){animation-delay:-2.6s}
 .flow{gap:7px}.flow li{background:linear-gradient(110deg,#fbf4e4,#e9dfcc);color:var(--ink);border:1px solid #fff9;box-shadow:0 3px #0003;transform:rotate(-.6deg);padding:10px 12px}.flow li:nth-child(2){transform:rotate(.6deg)}.flow b{color:#846132;font-size:17px}.flow span{font-size:13px}.title .note-dark{font-size:12px}
-.enemy-zone{background:linear-gradient(120deg,#422635ee,#291d30ee);border-color:#a16a694f;box-shadow:0 4px 0 #100b1b55}.enemy-zone:before{content:'';position:absolute;width:40px;height:12px;background:#d8bfa35c;top:-6px;left:calc(50% - 20px);transform:rotate(-5deg)}
-.player-zone{padding:9px 8px;background:linear-gradient(135deg,#f8edda,#dfd1b7);color:var(--ink);border-radius:18px;box-shadow:0 5px 0 #100b1b77,inset 0 0 0 1px #fff8}.player-zone .hp small{color:#756879}.player-zone .hp-track{background:#b3a58f}.player-zone .zone-head strong{font-size:13px;letter-spacing:1px}
-.punit{background:#fff8;border-color:#b7a48a55;box-shadow:0 2px 0 #a48b6940;overflow:visible}.punit .recipe{background:#42374e14;color:#675571}.punit .recipe.on{background:#77538d;color:#fff}.punit.vacant{background:#c8b69a22;border-color:#bba78d;min-height:135px}.vacant-mark{color:#b29a78}.punit .pips i{background:#bba98d}.punit .pips i.on{background:#e6ab24;filter:drop-shadow(0 1px 0 #81551c)}.punit canvas{filter:drop-shadow(0 4px 2px #3a203022);animation:idle 4.8s ease-in-out infinite}.punit:nth-child(2) canvas{animation-delay:-1.6s}.punit:nth-child(3) canvas{animation-delay:-3.2s}.punit.slap canvas{animation:slap .5s}.punit .pow{background:#41344e;color:#fff4dd;box-shadow:0 2px #191121}
-.duel{background:linear-gradient(145deg,#3b304c,#21192f);border:1px solid #c9a25c66;box-shadow:0 4px 0 #110b1c, inset 0 1px #fff2}.duel .chips{background:linear-gradient(135deg,#4c97d8,#2867aa)}.duel .mult{background:linear-gradient(135deg,#e97159,#bf4439)}.score b{color:#ffdb79}.aff-axis,.axis,.compound{border:1px solid #ffffff0e}.axis.full{border-color:#eac16e}
-.dock{background:linear-gradient(#36293e,#21182d);border-top:1px solid #d9b98255;box-shadow:0 -8px 30px #0004}.sticker{background:linear-gradient(135deg,#fffaf0,#eadcc2);box-shadow:0 0 0 3px #fff5e6,0 5px 0 3px #100c1c66}.sticker::before{border-style:solid;border-width:1px;opacity:.7}.go{background:linear-gradient(#ffe19a,#efb744);border:1px solid #ffe8b2;box-shadow:0 4px 0 #a87327,0 6px 12px #0003;text-shadow:0 1px #fff6}.deck-mini{border:1px solid #9982ad66;box-shadow:3px 3px #161020,5px 5px #9982ad44}.pip{border-radius:3px;transform:rotate(45deg)}
-.over-card{background:linear-gradient(135deg,#fff5df,#e7d6b5);color:var(--ink);border:5px solid #fff9;border-radius:22px;padding:32px 20px;box-shadow:0 20px 60px #0008;transform:rotate(-2deg)}.over p{color:#706075}.over h2{font-size:56px;color:#af7024;text-shadow:0 2px #fff}.over .go{transform:rotate(2deg)}.reward h2,.result h2{letter-spacing:-1px}.reward-hand .sticker{animation:cardDeal .45s backwards}.reward-hand .sticker:nth-child(2){animation-delay:.1s}.reward-hand .sticker:nth-child(3){animation-delay:.2s}
+.player-zone{padding:9px 8px;background:linear-gradient(135deg,#f8edda,#dfd1b7);color:var(--ink);border-radius:18px;box-shadow:0 5px 0 #100b1b77,inset 0 0 0 1px #fff8}.player-zone .zone-head strong{font-size:13px;letter-spacing:1px}
+.punit{background:#fff8;border-color:#b7a48a55;box-shadow:0 2px 0 #a48b6940;overflow:visible}.punit .recipe{background:#42374e14;color:#675571}.punit .recipe.on{background:#77538d;color:#fff}.punit.vacant{background:#c8b69a22;border-color:#bba78d;min-height:135px}.vacant-mark{color:#b29a78}.punit canvas{filter:drop-shadow(0 4px 2px #3a203022);animation:idle 4.8s ease-in-out infinite}.punit:nth-child(2) canvas{animation-delay:-1.6s}.punit:nth-child(3) canvas{animation-delay:-3.2s}.punit.slap canvas{animation:slap .5s}
+.duel{background:linear-gradient(145deg,#3b304c,#21192f);border:1px solid #c9a25c66;box-shadow:0 4px 0 #110b1c, inset 0 1px #fff2}.duel .chips{background:linear-gradient(135deg,#4c97d8,#2867aa)}.duel .mult{background:linear-gradient(135deg,#e97159,#bf4439)}.score b{color:#ffdb79}.axis{border:1px solid #ffffff0e}.axis.full{border-color:#eac16e}
+.dock{background:linear-gradient(#36293e,#21182d);border-top:1px solid #d9b98255;box-shadow:0 -8px 30px #0004}.sticker{background:linear-gradient(135deg,#fffaf0,#eadcc2);box-shadow:0 0 0 3px #fff5e6,0 5px 0 3px #100c1c66}.sticker::before{border-style:solid;border-width:1px;opacity:.7}.go{background:linear-gradient(#ffe19a,#efb744);border:1px solid #ffe8b2;box-shadow:0 4px 0 #a87327,0 6px 12px #0003;text-shadow:0 1px #fff6}.deck-mini{border:1px solid #9982ad66;box-shadow:3px 3px #161020,5px 5px #9982ad44}.pip{border-radius:3px;transform:rotate(45deg)}.reward h2,.result h2{letter-spacing:-1px}
 /* 효과 레이어는 입력을 가로채지 않으며 JS에서 제거한다. */
-.fx-particle,.fx-flight,.fx-ring,.fx-projectile{position:fixed;pointer-events:none;z-index:80}.fx-flight{margin:0;transform-origin:center}.fx-ring{width:74px;height:74px;border:3px solid var(--gold);border-radius:50%;box-shadow:0 0 20px #ffdb7955}.fx-particle{width:7px;height:11px;background:var(--gold);border-radius:2px}.fx-projectile{width:18px;height:70px;border-radius:70%;background:linear-gradient(transparent,#ffe7a8,#fff);box-shadow:0 0 18px #ffcc65;transform-origin:center}.fx-source{filter:brightness(1.45);box-shadow:0 0 0 2px #ffe19a,0 0 20px #f5c64b77!important}.punit[data-body-element] canvas{filter:drop-shadow(0 0 var(--glow) var(--aura))}.hand.dealing .sticker{animation:cardDeal .38s backwards}.hand.dealing .sticker:nth-child(2){animation-delay:.07s}.hand.dealing .sticker:nth-child(3){animation-delay:.14s}
+.fx-particle,.fx-flight,.fx-ring{position:fixed;pointer-events:none;z-index:80}.fx-flight{margin:0;transform-origin:center}.fx-ring{width:74px;height:74px;border:3px solid var(--gold);border-radius:50%;box-shadow:0 0 20px #ffdb7955}.fx-particle{width:7px;height:11px;background:var(--gold);border-radius:2px}.fx-source{filter:brightness(1.45);box-shadow:0 0 0 2px #ffe19a,0 0 20px #f5c64b77!important}.punit[data-body-element] canvas{filter:drop-shadow(0 0 var(--glow) var(--aura))}.hand.dealing .sticker{animation:cardDeal .38s backwards}.hand.dealing .sticker:nth-child(2){animation-delay:.07s}.hand.dealing .sticker:nth-child(3){animation-delay:.14s}
 @keyframes idle{0%,100%{transform:translateY(0) rotate(-.7deg)}50%{transform:translateY(-3px) rotate(.7deg)}}
 @keyframes cardDeal{from{opacity:0;translate:35px 40px;scale:.8}to{opacity:1;translate:0 0;scale:1}}
 @media(max-height:760px){.title{gap:10px;padding:8px 16px}.title-art{padding:20px 0 8px}.player-zone{padding:5px 6px}.punit.vacant{min-height:110px}.flow li{padding:8px 10px}.title .lead{font-size:13px}}
-@media(prefers-reduced-motion:reduce){.punit canvas,.title-art canvas,.hand.dealing .sticker,.reward-hand .sticker{animation:none!important}}
-.ui-icon{width:17px;height:17px;vertical-align:middle;flex-shrink:0}.tools button{display:flex;align-items:center;gap:4px}.deck-mini .ui-icon,.compound .ui-icon{width:12px;height:12px}.reward-deck{align-self:center;display:flex;gap:6px;align-items:center;border:1px solid #b49c7355;border-radius:20px;padding:6px 12px;color:#d9c59c;font-size:12px}.zone-head strong{display:flex;align-items:center;gap:4px}
+@media(prefers-reduced-motion:reduce){.punit canvas,.title-art canvas,.hand.dealing .sticker{animation:none!important}}
+.ui-icon{width:17px;height:17px;vertical-align:middle;flex-shrink:0}.tools button{display:flex;align-items:center;gap:4px}.deck-mini .ui-icon{width:12px;height:12px}.zone-head strong{display:flex;align-items:center;gap:4px}
 /* 중첩은 무기 근처, 맨몸 속성은 몸 주변에만 표시한다. */
-.eunit,.punit{position:relative}
+.punit{position:relative}
 .element-fx{position:absolute;pointer-events:none;z-index:3;left:70%;top:29%;width:24%;height:32%;color:var(--element-color)}
 .element-fx.body-fx{left:14%;top:16%;width:72%;height:49%}
 .element-fx i{position:absolute;width:5px;height:8px;background:currentColor;opacity:0;animation:elementDrift 1.9s ease-out infinite;box-shadow:0 0 5px currentColor}
@@ -402,6 +311,7 @@ main.battle{justify-content:space-between}
 .tools{gap:4px}.tools button{padding:6px 8px}
 @media(max-width:400px){.top{padding-inline:10px}.stage{gap:5px;font-size:14px}.turn{font-size:12px}}
 .monster-slot::after{transition:opacity .4s}.blind-zone.defeated .monster-slot::after{opacity:0}
+.el-btn{display:inline-flex;padding:0;border-radius:999px}
 </style></head><body><div id="app"></div><div id="toast" role="status" aria-live="polite"></div><dialog id="info"><div id="info-content"></div><form method="dialog"><button class="go">닫기</button></form></dialog><script>(()=>{'use strict';const modules={};
 modules["src/content/art.mjs"]=(()=>{
 
@@ -554,6 +464,7 @@ function validateContent(c=content){
  check(byId(c.monsters,c.bossMonsterId),'보스 몬스터');
  check(c.elements.every(e=>c.monsters.some(m=>m.elementId===e.id)),'속성별 몬스터');
  for(const [k,v] of Object.entries(c.affinity.beats))check(byId(c.elements,k)&&byId(c.elements,v),'상성 참조');
+ {const b=c.affinity.beats,seen=new Set();let k=c.elements[0].id;while(k&&!seen.has(k)){seen.add(k);k=b[k];}check(k===c.elements[0].id&&seen.size===c.elements.length,'상성은 모든 속성을 한 바퀴 도는 순환');}
  check(c.characterRules.guaranteedTurns.length===c.balance.blindCount&&c.characterRules.guaranteedTurns.every(ts=>ts.every(t=>Number.isInteger(t)&&t>=1&&t<=c.balance.turnsPerBlind))&&c.characterRules.randomChance>=0&&c.characterRules.randomChance<=1,'캐릭터 카드 규칙');
  const rw=c.rewardRules;
  check(rw.offerCount===3&&rw.grades.every(g=>Number.isInteger(g.weight)&&g.weight>0&&Number.isInteger(g.levels)&&g.levels>0)&&rw.comboKinds.every(k=>c.comboLevelKinds.includes(k)),'보상 규칙');
@@ -616,6 +527,8 @@ function evaluateCombos(team,c,levels){
  }
  return found;
 }
+// 조합 무기 효과의 레벨별 세기. 효과 문구(화면)도 이 함수를 쓴다.
+const effectStrength=(effect,level)=>byLevel(effect.value,effect.perLevel,level);
 function recipeFor(unit,c){return c.weaponRecipes.find(r=>r.weaponId===unit.weaponId&&r.elementId===unit.elementId)??null;}
 function effectCount(effect,team,matches){
  switch(effect.condition){
@@ -636,7 +549,7 @@ function evaluateWeaponEffects(team,matches,c,levels){
  let flat=0,multiplier=1,targetPercent=0,accumulateGain=0;const effects=[];
  for(const unit of members(team)){
   const recipe=recipeFor(unit,c);if(!recipe)continue;
-  const effect=byId(c.weaponEffects,recipe.effectId),level=levelOf(levels,recipe.id),strength=byLevel(effect.value,effect.perLevel,level);
+  const effect=byId(c.weaponEffects,recipe.effectId),level=levelOf(levels,recipe.id),strength=effectStrength(effect,level);
   const count=effectCount(effect,team,matches),scale=effectScale(effect,team);
   const amount=effect.operation==='multiply'?Math.pow(strength,count):strength*count*scale;
   if(effect.operation==='multiply')multiplier*=amount;else if(effect.operation==='add')flat+=amount;else if(effect.operation==='targetPercent')targetPercent+=amount;else accumulateGain+=amount;
@@ -691,16 +604,22 @@ function drawCards(b,count){
  }
 }
 
-return {makeUnit,attachmentReason,attachUnit,levelOf,evaluateCombos,recipeFor,evaluateWeaponEffects,relationOf,evaluateAffinity,scoreTeam,turnEndGain,nextRandom,shuffle,weightedPick,drawCards};})();
+return {makeUnit,attachmentReason,attachUnit,levelOf,evaluateCombos,recipeFor,effectStrength,evaluateWeaponEffects,relationOf,evaluateAffinity,scoreTeam,turnEndGain,nextRandom,shuffle,weightedPick,drawCards};})();
 modules["src/application/game.mjs"]=(()=>{
 const {byId}=modules["src/content/data.mjs"];
-const {makeUnit,attachUnit,attachmentReason,evaluateCombos,scoreTeam,turnEndGain,shuffle,weightedPick,drawCards,nextRandom}=modules["src/domain/rules.mjs"];
+const {makeUnit,attachUnit,attachmentReason,evaluateCombos,recipeFor,scoreTeam,turnEndGain,shuffle,weightedPick,drawCards,nextRandom}=modules["src/domain/rules.mjs"];
 
 // 흐름: title → (블라인드마다) attach ×6턴 → resolve → reward_reveal → reward_pick → reward_done → 다음 블라인드
 //       목표 미달이거나 마지막 블라인드를 넘기면 run_result.
 const initialState=()=>({phase:'title',run:null,battle:null,reward:null,appliedCommandIds:[],events:[],history:[]});
 const progressOf=run=>({levels:run.levels,accumulated:run.accumulated});
 const blindOf=(b)=>({target:b.target,elementId:b.elementId});
+// 지금 전투하면 판정될 점수. 마지막 턴에는 턴 종료 누적이 판정 직전에 더해지므로 미리 포함한다.
+// 화면의 예상 점수와 EndTurn의 판정이 같은 함수를 쓴다. team을 주면 그 편성으로 계산한다(미리보기용).
+function projectedScore(run,b,c,team=run.team){
+ const gain=b.turn>=c.balance.turnsPerBlind?turnEndGain(team,progressOf(run),c):0;
+ return scoreTeam(team,blindOf(b),{levels:run.levels,accumulated:run.accumulated+gain},c);
+}
 function validateAttachment(state,command,c){
  const b=state.battle;if(state.phase!=='attach'||!b)return 'phase';if(b.actionsUsed>=c.balance.attachLimit)return 'limit';
  const card=b.hand.find(x=>x.instanceId===command.stickerInstanceId);if(!card||!card.stickerDefId)return 'card';
@@ -736,7 +655,7 @@ function startBlind(s,c){
 // 보상 후보: 원정대가 든 레시피 각각 + 족보 종류. 3장을 고르고 각각 등급을 굴린다.
 function rollRewards(s,c){
  const r=s.run,rw=c.rewardRules;let seed=r.rngState;
- const recipes=[...new Set(r.team.characters.filter(Boolean).map(u=>c.weaponRecipes.find(x=>x.weaponId===u.weaponId&&x.elementId===u.elementId)?.id).filter(Boolean))];
+ const recipes=[...new Set(r.team.characters.filter(Boolean).map(u=>recipeFor(u,c)?.id).filter(Boolean))];
  const candidates=[...recipes.map(key=>({type:'recipe',key})),...rw.comboKinds.map(key=>({type:'combo',key}))];
  const sh=shuffle(candidates,seed);seed=sh.seed;
  const offers=sh.list.slice(0,rw.offerCount).map((o,k)=>{const g=weightedPick(rw.grades,seed);seed=g.seed;return {id:`${r.runId}:reward:${r.blindIndex}:${k}`,...o,grade:g.item.id,levels:g.item.levels};});
@@ -785,12 +704,13 @@ function applyCommand(state,cmd,c){
  }
  case 'EndTurn':{
   if(s.phase!=='attach')return fail('phase');
-  const b=s.battle,r=s.run,gain=turnEndGain(r.team,progressOf(r),c);
+  const b=s.battle,r=s.run,last=b.turn>=c.balance.turnsPerBlind;
+  // 마지막 턴은 누적을 더하기 전 상태로 판정 점수를 구한다(projectedScore가 누적을 포함한다).
+  const res=last?projectedScore(r,b,c):null,gain=turnEndGain(r.team,progressOf(r),c);
   if(gain>0){r.accumulated+=gain;s.events.push({type:'Accumulated',gain,total:r.accumulated});}
   b.discardPile.push(...b.hand.filter(x=>x.stickerDefId));b.hand=[];
-  if(b.turn<c.balance.turnsPerBlind){s.events.push({type:'TurnEnded',turn:b.turn});beginTurn(s,c);break;}
+  if(!last){s.events.push({type:'TurnEnded',turn:b.turn});beginTurn(s,c);break;}
   // 마지막 턴: 목표 점수 판정.
-  const res=scoreTeam(r.team,blindOf(b),progressOf(r),c);
   b.lastScore=res;b.outcome=res.score>=b.target?'win':'lose';r.rngState=b.rngState;s.phase='resolve';
   s.history.push({blindIndex:b.blindIndex,target:b.target,score:res.score,outcome:b.outcome});
   s.events.push({type:'BlindResolved',score:res.score,target:b.target,outcome:b.outcome});break;
@@ -820,9 +740,10 @@ function applyCommand(state,cmd,c){
  s.appliedCommandIds.push(cmd.commandId);return {state:s,error:null,events:s.events};
 }
 
-return {initialState,validateAttachment,validatePlacement,placeUnit,applyCommand};})();
+return {initialState,projectedScore,applyCommand};})();
 modules["src/rendering/compositor.mjs"]=(()=>{
 const {byId}=modules["src/content/data.mjs"];
+const {recipeFor}=modules["src/domain/rules.mjs"];
 
 const cache=new Map(),images=new Map();
 const surface=()=>{const cv=document.createElement('canvas');cv.width=512;cv.height=512;return cv;};
@@ -833,7 +754,7 @@ const starTier=lv=>lv>=5?3:lv>=3?2:lv>=1?1:0;
 const glowLevel=u=>u.weaponId&&u.elementId?Math.min(u.elementLevel,4):0;
 function composeVisual(unit,c){
  const def=byId(c.characters,unit.characterDefId),profile=c.visuals[def.visualProfileId];
- const recipe=c.weaponRecipes.find(r=>r.weaponId===unit.weaponId&&r.elementId===unit.elementId);
+ const recipe=recipeFor(unit,c);
  const entries={body:profile.bodyAssetId,weapon:unit.weaponId?(recipe?.assetId??byId(c.weapons,unit.weaponId).assetId):null,hand:profile.frontHandAssetId,element:unit.elementId?byId(c.elements,unit.elementId).assetId:null};
  const result=profile.layerOrder.filter(layer=>entries[layer]).map(layer=>({layer,asset:c.assets[entries[layer]],anchor:profile.anchors[layer],unit,def}));
  const ornament=(layer,id,anchor,scale)=>({layer,asset:{...c.assets[id],scale:scale*1254/c.assets[id].sourceRect[2]},anchor,unit,def});
@@ -922,8 +843,8 @@ async function renderAsset(canvas,asset){
 return {composeVisual,renderCharacter,renderAsset};})();
 modules["src/presentation/main.mjs"]=(()=>{
 const {content,byId,nameOf,validateContent}=modules["src/content/data.mjs"];
-const {makeUnit,attachUnit,recipeFor,evaluateCombos,scoreTeam,relationOf,levelOf}=modules["src/domain/rules.mjs"];
-const {initialState,applyCommand,validateAttachment,validatePlacement,placeUnit}=modules["src/application/game.mjs"];
+const {makeUnit,recipeFor,evaluateCombos,effectStrength,relationOf,levelOf}=modules["src/domain/rules.mjs"];
+const {initialState,projectedScore,applyCommand}=modules["src/application/game.mjs"];
 const {renderCharacter}=modules["src/rendering/compositor.mjs"];
 
 validateContent();
@@ -957,22 +878,30 @@ function comboChanges(before,after){
 }
 // 조합 무기 효과 문장. level을 주면 그 레벨의 수치로 쓴다.
 function effectDescription(recipe,level=1){
- const e=byId(c.weaponEffects,recipe.effectId),s=number(e.value+e.perLevel*(level-1));
+ const e=byId(c.weaponEffects,recipe.effectId),s=number(effectStrength(e,level));
  const cond=e.condition==='combo'?`${axisLabels[e.axis]} ${comboLabels[e.kinds[0]]}${e.kinds.length>1?' 이상':''}이면 `:e.condition==='completeAxes'?`${e.axes.map(a=>axisLabels[a]).join('·')}의 컬렉션·트리플마다 `:e.condition==='collections'?'컬렉션·스트레이트마다 ':e.condition==='starBalance'?`3명의 별 Lv 차이가 ${e.maxGap} 이하면 `:'';
  const scale=e.scaleBy==='starLevelSum'?'별 Lv 합×':e.scaleBy==='maxStarLevel'?'최고 별 Lv×':'';
  const what=e.operation==='multiply'?`배율 ×${s}`:e.operation==='add'?`기초 +${scale}${s}`:e.operation==='targetPercent'?`최종 점수 + 목표의 ${s}%`:`누적 +${scale}${s}`;
  return `${e.operation==='accumulate'?'턴 종료 시 ':''}${cond}${what}`;
 }
 function effectKind(recipe){const op=byId(c.weaponEffects,recipe.effectId).operation;return op==='multiply'?'mul':op==='accumulate'?'acc':'add';}
-const blindOf=b=>({target:b.target,elementId:b.elementId});
-function reading(){const b=state.battle;return state.phase==='attach'?scoreTeam(state.run.team,blindOf(b),state.run,c):b.lastScore;}
+// 점수 계산은 상태가 바뀔 때만 한다. 한 번의 렌더와 드래그 중 미리보기가 같은 결과를 재사용한다.
+let memoState=null,memoReading=null;const memoPreview=new Map();
+function syncMemo(){if(memoState!==state){memoState=state;memoReading=null;memoPreview.clear();}}
+function reading(){syncMemo();return memoReading??=state.phase==='attach'?projectedScore(state.run,state.battle,c):state.battle.lastScore;}
+// 미리보기는 실제 명령을 상태 사본에 적용해 본다(dry run). 규칙이 바뀌어도 화면과 엔진이 어긋나지 않는다.
 function previewFor(slot,cardId){
- const b=state.battle,card=b.hand.find(x=>x.instanceId===cardId);if(!card)return {reason:'card'};
- const team=structuredClone(state.run.team),old=team.characters[slot];let unit,def=null;
- if(card.characterDefId){const reason=validatePlacement(state,{cardInstanceId:cardId,targetSlot:slot},c);if(reason)return {reason};unit=placeUnit(old,slot,card.characterDefId);}
- else{if(!old)return {reason:'target'};const reason=validateAttachment(state,{stickerInstanceId:cardId,targetInstanceId:old.instanceId},c);if(reason)return {reason};def=byId(c.stickers,card.stickerDefId);unit=attachUnit(old,def,c).unit;}
- team.characters[slot]=unit;
- return {reason:null,reading:scoreTeam(team,blindOf(b),state.run,c),unit,old,def,card,before:evaluateCombos(state.run.team,c,state.run.levels),after:evaluateCombos(team,c,state.run.levels)};
+ syncMemo();const key=slot+'|'+cardId;if(memoPreview.has(key))return memoPreview.get(key);
+ const b=state.battle,card=b.hand.find(x=>x.instanceId===cardId),old=state.run.team.characters[slot];let result;
+ if(!card)result={reason:'card'};
+ else if(!card.characterDefId&&!old)result={reason:'target'};
+ else{
+  const cmd=card.characterDefId?{type:'PlaceCharacter',cardInstanceId:cardId,targetSlot:slot}:{type:'AttachSticker',stickerInstanceId:cardId,targetInstanceId:old.instanceId};
+  const r=applyCommand(state,{...cmd,commandId:'preview'},c);
+  if(r.error)result={reason:r.error};
+  else{const team=r.state.run.team;result={reason:null,reading:projectedScore(state.run,b,c,team),unit:team.characters[slot],old,def:card.stickerDefId?byId(c.stickers,card.stickerDefId):null,card,before:evaluateCombos(state.run.team,c,state.run.levels),after:evaluateCombos(team,c,state.run.levels)};}
+ }
+ memoPreview.set(key,result);return result;
 }
 
 // 커맨드 실행 전후 상태를 비교해 연출 정보를 만든다. 도메인 상태는 건드리지 않는다.
@@ -987,7 +916,7 @@ function buildFx(type,prev,next,events){
  if(type==='AttachSticker'||type==='PlaceCharacter'){
   const slot=type==='PlaceCharacter'?events.find(e=>e.slot!==undefined).slot:prev.run.team.characters.findIndex(u=>u?.instanceId===events[0].targetInstanceId);
   f.attached=slot;
-  f.delta=scoreTeam(next.run.team,blindOf(next.battle),next.run,c).score-scoreTeam(prev.run.team,blindOf(prev.battle),prev.run,c).score;
+  f.delta=projectedScore(next.run,next.battle,c).score-projectedScore(prev.run,prev.battle,c).score;
   f.changes=comboChanges(evaluateCombos(prev.run.team,c,prev.run.levels),evaluateCombos(next.run.team,c,next.run.levels));
   for(const e of events){
    if(e.type==='CharacterPlaced')f.changes.unshift({text:`${nameOf(e.characterDefId)} 합류!`,gain:true});
@@ -1033,7 +962,7 @@ function blindZone(){
  const fill=Math.min(100,score/b.target*100),next=elementOf(b.nextElementId);
  const risk=next?members(state.run.team).filter(u=>relationOf(u.elementId,next.id,c)==='disadvantage').length:0;
  return `<section class="blind-zone ${b.boss?'boss':''}" id="blind-zone"><div class="monster-slot" aria-hidden="true">${ic(m.assetId,'monster-art')}</div>
- <div class="blind-info"><div class="blind-name"><strong>${nameOf(m.nameKey)}</strong>${b.boss?'<em class="boss-tag">보스</em>':''}${elementChip(b.elementId)}</div>
+ <div class="blind-info"><div class="blind-name"><strong>${nameOf(m.nameKey)}</strong>${b.boss?'<em class="boss-tag">보스</em>':''}<button type="button" class="el-btn" data-action="affinity" aria-label="상성 설명 보기">${elementChip(b.elementId)}</button></div>
  <div class="target-row"><small>목표</small><b id="target">${b.target}</b></div>
  <div class="target-gauge" aria-label="예상 점수 ${score} / 목표 ${b.target}"><i id="gauge" style="width:${fill}%"></i><span class="gauge-mark"></span></div>
  ${next?`<div class="next-blind">다음 블라인드 ${elementChip(next.id)}${risk?`<span class="risk">불리 ${risk}명</span>`:''}</div>`:'<div class="next-blind">마지막 블라인드</div>'}</div></section>`;
@@ -1045,8 +974,9 @@ function scoreBoard(){
  <div class="duel-foot"><span class="foe">${r.targetBonus?`목표 보너스 <b>+${r.targetBonus}</b>`:''}</span><span class="verdict ${gap>=0?'good':'bad'}" id="verdict">${gap>=0?`목표 달성 +${gap}`:`목표까지 ${-gap}`}</span></div>
  <div class="preview-line" id="preview-line"></div></button>`;
 }
-function unitBadges(u,b){
- const e=elementOf(u.elementId),rel=relationOf(u.elementId,b.elementId,c),nextRel=b.nextElementId?relationOf(u.elementId,b.nextElementId,c):'neutral';
+// final: 원정이 끝난 뒤라 상성·다음 블라인드 경고를 표시하지 않는다.
+function unitBadges(u,b,final=false){
+ const e=elementOf(u.elementId),rel=final?'neutral':relationOf(u.elementId,b.elementId,c),nextRel=!final&&b.nextElementId?relationOf(u.elementId,b.nextElementId,c):'neutral';
  const star=u.starLevel?`<span class="lv-star" title="별 Lv${u.starLevel}">★${u.starLevel}</span>`:'';
  const el=e?`<span class="lv-el ${rel}" style="--el:${e.color}" title="${nameOf(e.id)} Lv${u.elementLevel}">${ic(e.assetId)}<b>${u.elementLevel}</b>${rel!=='neutral'?`<i class="rel">${relationMark[rel]}</i>`:''}</span>`:'';
  const warn=nextRel==='disadvantage'?'<span class="lv-warn" title="다음 블라인드에서 불리">!</span>':'';
@@ -1157,7 +1087,7 @@ function renderRunResult(){
  const win=state.run.result==='win',h=state.history;
  return stageTop()+`<main class="result"><h2 class="${win?'':'lose'}">${win?'원정 성공':'원정 실패'}</h2><p class="lead">${win?`${c.blinds.length}개의 블라인드를 모두 넘겼어요.`:`블라인드 ${h.length}에서 목표를 넘지 못했어요.`}</p>
  <table class="table history">${h.map(x=>`<tr class="${x.outcome}"><td>블라인드 ${x.blindIndex+1}</td><td>${x.score} / 목표 ${x.target}</td></tr>`).join('')}</table>
- <div class="party">${members(state.run.team).map(u=>`<div class="punit static">${unitBadges(u,state.battle)}<canvas data-render="${u.instanceId}"></canvas><span class="uname">${nameOf(u.characterDefId)}</span></div>`).join('')}</div></main><footer class="dock"><button type="button" class="go" data-action="restart">다시 원정</button></footer>`;
+ <div class="party">${members(state.run.team).map(u=>`<div class="punit static">${unitBadges(u,state.battle,true)}<canvas data-render="${u.instanceId}"></canvas><span class="uname">${nameOf(u.characterDefId)}</span></div>`).join('')}</div></main><footer class="dock"><button type="button" class="go" data-action="restart">다시 원정</button></footer>`;
 }
 
 /* ── 렌더 ── */
@@ -1198,7 +1128,6 @@ function snapshotCard(el){if(!el)return null;const node=el.cloneNode(true);el.qu
 function decorateUnits(){
  state.run?.team.characters.forEach((u,slot)=>{
   if(!u)return;const el=app.querySelector(`canvas[data-render="${u.instanceId}"]`)?.closest('.punit');if(!el)return;
-  el.dataset.rank=String(u.starLevel>=5?3:u.starLevel>=3?2:u.starLevel>=1?1:0);
   if(!u.elementId||u.elementLevel<3)return;
   const color=elementOf(u.elementId).color,field=document.createElement('span');
   field.className='element-fx '+u.elementId.replace('element_','')+(u.weaponId?'':' body-fx');field.setAttribute('aria-hidden','true');field.style.setProperty('--element-color',color);field.innerHTML='<i></i><i></i><i></i>';el.append(field);
@@ -1315,10 +1244,15 @@ function preview(target){
 /* ── 바텀시트 ── */
 function openInfo(html){document.getElementById('info-content').innerHTML=html;const d=document.getElementById('info');if(!d.open)d.showModal();}
 function cycleText(){const m=c.affinity.beats,start=Object.keys(m)[0];let k=start,s=[nameOf(k)];do{k=m[k];s.push(nameOf(k));}while(k!==start);return s.join(' > ');}
+// 캐릭터 카드 확정 턴 설명. 콘텐츠의 guaranteedTurns에서 만든다.
+function guaranteedText(){
+ const g=c.characterRules.guaranteedTurns,t=ts=>ts.length>1?`${ts[0]}~${ts[ts.length-1]}턴`:`${ts[0]}턴`,rest=g.slice(1).map(t);
+ return rest.every(x=>x===rest[0])?`블라인드 1은 ${t(g[0])}, 이후 블라인드는 ${rest[0]}에`:g.map((ts,i)=>`블라인드 ${i+1}은 ${t(ts)}`).join(', ')+'에';
+}
 function showRules(){const t=c.balance;openInfo(`<h2>원정 규칙</h2><ol>
 <li>원정은 블라인드 ${c.blinds.length}개. 블라인드마다 ${t.turnsPerBlind}턴을 진행하고, 마지막 턴이 끝나면 점수가 목표 이상인지 판정해요. 못 넘기면 원정이 끝나요.</li>
 <li>매 턴 손패 ${t.handSize}장을 받고 최대 ${t.attachLimit}번 붙여요. 남은 카드는 턴 종료 때 버려져요.</li>
-<li>블라인드 첫 턴(블라인드 1은 1~3턴)에는 캐릭터 카드가 꼭 나오고, 다른 턴에도 가끔 나와요. 빈 자리에 놓거나 교체할 수 있고, 교체해도 스티커와 레벨은 옮겨져요.</li>
+<li>${guaranteedText()} 캐릭터 카드가 꼭 나오고, 다른 턴에도 가끔 나와요. 빈 자리에 놓거나 교체할 수 있고, 교체해도 스티커와 레벨은 옮겨져요.</li>
 <li><b>별</b>: 붙일 때마다 Lv+1. 캐릭터 기초 점수가 Lv당 +${t.starPower}.</li>
 <li><b>속성</b>: 같은 속성을 붙이면 Lv+1, 다른 속성을 붙이면 교체되고 Lv1부터 다시 시작해요.</li>
 <li><b>무기</b>: 기초 +${t.weaponPower}. 무기와 속성이 함께 있으면 조합 무기가 돼요.</li>

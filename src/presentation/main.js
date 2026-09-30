@@ -82,6 +82,8 @@ function buildFx(type,prev,next,events){
    if(e.type==='ElementLeveled')f.changes.unshift({text:`속성 Lv${e.level}`,gain:true});
    if(e.type==='ElementReplaced')f.changes.unshift({text:`${nameOf(e.from)} Lv${e.lostLevel} 사라짐`,gain:false});
   }
+  const was=prev.run.team.characters[slot],now=next.run.team.characters[slot],rec=now&&recipeFor(now,c);
+  if(rec&&(!was||recipeFor(was,c)?.id!==rec.id))f.changes.unshift({text:`${rec.name} 완성!`,gain:true,major:true});
  }
  f.turnStart=events.some(e=>e.type==='TurnStarted');
  f.blindStart=events.some(e=>e.type==='BlindStarted');
@@ -94,7 +96,7 @@ function buildFx(type,prev,next,events){
 
 /* ── 공용 조각 ── */
 function uiIcon(kind){const shapes={book:'<path d="M3 5q5-2 9 1 4-3 9-1v15q-5-2-9 0-4-2-9 0Z"/><path d="M12 6v14M6 9h3m-3 4h3m6-4h3m-3 4h3"/>',seal:'<path d="m12 2 3 3 4 1 1 4 2 3-3 3-1 4-4 1-3 1-3-3-4-1-1-4-1-3 3-3 1-4Z"/><path d="m7 12 3 3 6-6"/>',cards:'<rect x="5" y="3" width="15" height="18" rx="3"/><path d="M3 6 1 18q0 3 3 3m7-13 4 4-4 4-3-4Z"/>',sword:'<path d="m16 3 5-1-1 5-9 9-4-4Z M5 11l8 8M3 21l6-6"/>'};return `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${shapes[kind]??shapes.seal}</svg>`;}
-function toolsNav(){return `<nav class="tools"><button data-action="recipes">${uiIcon('seal')}조합</button><button data-action="rules">${uiIcon('book')}규칙</button>${state.phase!=='title'?'<button data-action="restart-ask" aria-label="처음부터 다시">↺</button>':''}</nav>`;}
+function toolsNav(){return `<nav class="tools"><button data-action="help" class="help-btn" aria-label="도움말">${uiIcon('book')}도움말</button>${state.phase!=='title'?'<button data-action="restart-ask" aria-label="처음부터 다시">↺</button>':''}</nav>`;}
 function stageTop(extra=''){
  const i=state.run.blindIndex,cleared=k=>state.history.some(h=>h.blindIndex===k&&h.outcome==='win');
  return `<header class="top"><div class="stage">${c.blinds.map((b,k)=>`<span class="pip ${cleared(k)?'done':k===i?'now':''} ${b.boss?'boss':''}"></span>`).join('')}${extra}</div>${toolsNav()}</header>`;
@@ -103,37 +105,35 @@ function elementChip(id,extra=''){const e=elementOf(id);return e?`<span class="e
 function stickerCard(id,{instanceId='',i=0,n=1,spent=false}={}){
  const s=byId(c.stickers,id),e=s.kind==='element'?byId(c.elements,s.payloadId):null;
  const rot=n>1?(i-(n-1)/2)*4:0,tint=e?.color??(s.kind==='star'?'#d9a72c':'#7d6aa0');
- const desc=s.kind==='star'?'별 Lv+1':s.kind==='weapon'?`기초 +${byId(c.weapons,s.payloadId).powerBonus}`:'속성 Lv+1';
+ const desc=s.kind==='weapon'?`+${byId(c.weapons,s.payloadId).powerBonus}`:'Lv+1';
  return `<button type="button" class="sticker k-${s.kind} ${instanceId&&selected===instanceId?'sel':''} ${spent?'spent':''}" style="--rot:${rot}deg;--tint:${tint}" data-action="select" data-card="${instanceId}" aria-pressed="${selected===instanceId}">${ic(s.iconAssetId,'sicon')}<span class="sname">${nameOf(s.nameKey)}</span><span class="sdesc">${desc}</span></button>`;
 }
 function handCard(card,i,n,spent){
  if(card.stickerDefId)return stickerCard(card.stickerDefId,{instanceId:card.instanceId,i,n,spent});
  const d=byId(c.characters,card.characterDefId),rot=n>1?(i-(n-1)/2)*4:0;
- return `<button type="button" class="sticker k-char ${selected===card.instanceId?'sel':''} ${spent?'spent':''}" style="--rot:${rot}deg;--tint:#7d6aa0" data-action="select" data-card="${card.instanceId}" aria-pressed="${selected===card.instanceId}"><canvas class="ccanvas" data-def-render="${d.id}"></canvas><span class="sname">${nameOf(d.id)}</span><span class="sdesc">배치·교체</span></button>`;
+ return `<button type="button" class="sticker k-char ${selected===card.instanceId?'sel':''} ${spent?'spent':''}" style="--rot:${rot}deg;--tint:#7d6aa0" data-action="select" data-card="${card.instanceId}" aria-pressed="${selected===card.instanceId}"><canvas class="ccanvas" data-def-render="${d.id}"></canvas><span class="sname">${nameOf(d.id)}</span><span class="sdesc">동료</span></button>`;
 }
 
 /* ── 전투 화면 ── */
+// 다음 블라인드 속성과 불리 경고는 이 턴부터 보여준다(초반엔 이번 블라인드에 집중).
+const NEXT_BLIND_FROM_TURN=4;
+const showNext=b=>b.nextElementId&&b.turn>=NEXT_BLIND_FROM_TURN;
+// 목표 패널: 몬스터 + 점수/목표 게이지 + 계산식 한 줄. 카드를 든 동안과 전투 연출 때는 계산식이 커진다.
 // 몬스터 그림 자리: 가로 세로 같은 상자. 그림 캔버스 1254×1254 전체를 담고, 바닥선(y=1165)이 상자 아래에서 7% 위에 온다.
-function blindZone(){
- const b=state.battle,m=monsterOf(b.monsterId),score=reading().score;
- const fill=Math.min(100,score/b.target*100),next=elementOf(b.nextElementId);
- const risk=next?members(state.run.team).filter(u=>relationOf(u.elementId,next.id,c)==='disadvantage').length:0;
- return `<section class="blind-zone ${b.boss?'boss':''}" id="blind-zone"><div class="monster-slot" aria-hidden="true">${ic(m.assetId,'monster-art')}</div>
- <div class="blind-info"><div class="blind-name"><strong>${nameOf(m.nameKey)}</strong>${b.boss?'<em class="boss-tag">보스</em>':''}<button type="button" class="el-btn" data-action="affinity" aria-label="상성 설명 보기">${elementChip(b.elementId)}</button></div>
- <div class="target-row"><small>목표</small><b id="target">${b.target}</b></div>
- <div class="target-gauge" aria-label="예상 점수 ${score} / 목표 ${b.target}"><i id="gauge" style="width:${fill}%"></i><span class="gauge-mark"></span></div>
- ${next?`<div class="next-blind">다음 블라인드 ${elementChip(next.id)}${risk?`<span class="risk">불리 ${risk}명</span>`:''}</div>`:'<div class="next-blind">마지막 블라인드</div>'}</div></section>`;
-}
-function scoreBoard(){
- const r=reading(),b=state.battle,gap=r.score-b.target;
- return `<button type="button" class="duel" id="duel" data-action="breakdown" aria-label="점수 계산 내역 보기">
- <div class="formula"><span class="chips"><small>기초</small><b id="chips">${number(r.chips)}</b></span><span class="op">×</span><span class="mult"><small>배율</small><b id="mult">${number(r.multiplier)}</b></span><span class="op">=</span><span class="score"><small>${state.phase==='attach'?'예상 점수':'최종 점수'}</small><b id="my-score">${r.score}</b></span></div>
- <div class="duel-foot"><span class="foe">${r.targetBonus?`목표 보너스 <b>+${r.targetBonus}</b>`:''}</span><span class="verdict ${gap>=0?'good':'bad'}" id="verdict">${gap>=0?`목표 달성 +${gap}`:`목표까지 ${-gap}`}</span></div>
- <div class="preview-line" id="preview-line"></div></button>`;
+function goalPanel(){
+ const b=state.battle,m=monsterOf(b.monsterId),r=reading(),gap=r.score-b.target;
+ const next=elementOf(b.nextElementId),risk=next?members(state.run.team).filter(u=>relationOf(u.elementId,next.id,c)==='disadvantage').length:0;
+ const expanded=state.phase==='resolve'||!!selected;
+ return `<section class="goal blind-zone ${b.boss?'boss':''} ${expanded?'expanded':''}" id="blind-zone"><div class="monster-slot" aria-hidden="true">${ic(m.assetId,'monster-art')}</div>
+ <div class="goal-main"><div class="blind-name"><strong>${nameOf(m.nameKey)}</strong>${b.boss?'<em class="boss-tag">보스</em>':''}<button type="button" class="el-btn" data-action="affinity" aria-label="상성 설명 보기">${elementChip(b.elementId)}</button></div>
+ <div class="goal-bar" aria-label="예상 점수 ${r.score} / 목표 ${b.target}"><i id="gauge" style="width:${Math.min(100,r.score/b.target*100)}%"></i><span class="goal-num"><b id="my-score">${r.score}</b><small>/ ${b.target}</small></span><span class="verdict ${gap>=0?'good':'bad'}" id="verdict">${gap>=0?'달성!':`−${-gap}`}</span></div>
+ <button type="button" class="formula-line duel" id="duel" data-action="breakdown" aria-label="점수 계산 내역 보기"><span class="chips"><small>기초</small><b id="chips">${number(r.chips)}</b></span><span class="op">×</span><span class="mult"><small>배율</small><b id="mult">${number(r.multiplier)}</b></span>${r.targetBonus?`<span class="bonus-note">+${r.targetBonus}</span>`:''}<span class="why">계산 보기</span></button>
+ <div class="preview-line" id="preview-line"></div>
+ ${showNext(b)?`<div class="next-blind">다음 ${elementChip(next.id)}${risk?`<span class="risk">! 불리 ${risk}명</span>`:''}</div>`:''}</div></section>`;
 }
 // final: 원정이 끝난 뒤라 상성·다음 블라인드 경고를 표시하지 않는다.
 function unitBadges(u,b,final=false){
- const e=elementOf(u.elementId),rel=final?'neutral':relationOf(u.elementId,b.elementId,c),nextRel=!final&&b.nextElementId?relationOf(u.elementId,b.nextElementId,c):'neutral';
+ const e=elementOf(u.elementId),rel=final?'neutral':relationOf(u.elementId,b.elementId,c),nextRel=!final&&showNext(b)?relationOf(u.elementId,b.nextElementId,c):'neutral';
  const star=u.starLevel?`<span class="lv-star" title="별 Lv${u.starLevel}">★${u.starLevel}</span>`:'';
  const el=e?`<span class="lv-el ${rel}" style="--el:${e.color}" title="${nameOf(e.id)} Lv${u.elementLevel}">${ic(e.assetId)}<b>${u.elementLevel}</b>${rel!=='neutral'?`<i class="rel">${relationMark[rel]}</i>`:''}</span>`:'';
  const warn=nextRel==='disadvantage'?'<span class="lv-warn" title="다음 블라인드에서 불리">!</span>':'';
@@ -142,7 +142,7 @@ function unitBadges(u,b,final=false){
 function recipeChip(u,r){
  const recipe=recipeFor(u,c);if(!recipe)return '';
  const eff=r.effects.find(x=>x.sourceInstanceId===u.instanceId),lv=levelOf(state.run.levels,recipe.id);
- return `<span class="recipe ${eff?.active?'on':''} k-${effectKind(recipe)}">${recipe.name} Lv${lv}<i>${eff?.active?'✓':'✗'}</i></span>`;
+ return `<span class="recipe ${eff?.active?'on':'idle'} k-${effectKind(recipe)}" title="${eff?.active?'효과 발동 중':'조건 미충족'}">${recipe.name}${lv>1?` <b>Lv${lv}</b>`:''}</span>`;
 }
 function playerUnit(u,slot,r){
  let cls='',badge='';
@@ -159,8 +159,8 @@ function playerZone(){
 function comboTray(){
  const r=reading(),burst=new Set((fx?.changes??[]).filter(x=>x.gain&&x.axis).map(x=>x.axis));
  const lv=k=>levelOf(state.run.levels,k);
- return `<button type="button" class="tray" data-action="combos" aria-label="족보 설명 보기">${c.comboAxes.map(axis=>{const m=r.matches.find(x=>x.axis===axis);return `<span class="axis ${m?(m.complete?'full':'part'):''} ${burst.has(axis)?'burst':''}"><small>${axisLabels[axis]}</small><b>${m?comboLabels[m.kind]:'—'}</b><em>${m?'+'+number(m.bonus):''}</em></span>`;}).join('')}
- <span class="combo-levels">${c.comboLevelKinds.map(k=>`<span class="${lv(k)>1?'up':''}">${levelKindLabels[k]}<b>Lv${lv(k)}</b></span>`).join('')}</span></button>`;
+ return `<button type="button" class="tray" data-action="combos" aria-label="족보 설명 보기">${c.comboAxes.map(axis=>{const m=r.matches.find(x=>x.axis===axis);return `<span class="axis ${m?(m.complete?'full':'part'):'empty'} ${burst.has(axis)?'burst':''}"><small>${axisLabels[axis]}</small>${m?`<b>${comboLabels[m.kind]}</b><em>+${number(m.bonus)}</em>`:''}</span>`;}).join('')}
+ ${c.comboLevelKinds.some(k=>lv(k)>1)?`<span class="combo-levels">${c.comboLevelKinds.filter(k=>lv(k)>1).map(k=>`<span class="up">${levelKindLabels[k]}<b>Lv${lv(k)}</b></span>`).join('')}</span>`:''}</button>`;
 }
 function hintText(){
  const b=state.battle,sel=b.hand.find(x=>x.instanceId===selected),selDef=sel?.stickerDefId?byId(c.stickers,sel.stickerDefId):null;
@@ -198,7 +198,7 @@ function resolveDock(){
 function renderBattle(){
  const b=state.battle;
  return stageTop(`<b>블라인드 ${b.blindIndex+1}</b><span class="turn">${b.turn}/${c.balance.turnsPerBlind}턴</span>`)+
- `<main class="battle">${blindZone()}${scoreBoard()}${playerZone()}${comboTray()}</main>${state.phase==='attach'?handDock():resolveDock()}`;
+ `<main class="battle">${goalPanel()}${playerZone()}${comboTray()}</main>${state.phase==='attach'?handDock():resolveDock()}`;
 }
 
 /* ── 타이틀 ── */
@@ -247,10 +247,43 @@ function renderRunResult(){
  <div class="party">${members(state.run.team).map(u=>`<div class="punit static">${unitBadges(u,state.battle,true)}<canvas data-render="${u.instanceId}"></canvas><span class="uname">${nameOf(u.characterDefId)}</span></div>`).join('')}</div></main><footer class="dock"><button type="button" class="go" data-action="restart">다시 원정</button></footer>`;
 }
 
+/* ── 신규 유저 안내 ── */
+// 상황이 처음 생길 때 한 번만 뜨는 팁. 본 팁은 브라우저에 기억한다(저장이 막혀 있어도 동작은 한다).
+const TIP_KEY='stickerBattle.tips.v1';
+const seenTips=(()=>{try{return new Set(JSON.parse(localStorage.getItem(TIP_KEY)??'[]'));}catch{return new Set();}})();
+function saveTips(){try{localStorage.setItem(TIP_KEY,JSON.stringify([...seenTips]));}catch{}}
+const attaching=()=>state.phase==='attach';
+const tips=[
+ {id:'goal',when:()=>attaching()&&state.battle.blindIndex===0&&state.battle.turn===1,text:'카드를 끌어 원정대에 붙여요. 6턴이 끝났을 때 점수가 목표를 넘으면 통과!'},
+ {id:'combo',when:()=>attaching()&&reading().matches.length>0,text:'같은 종족·직업·무기·속성이 2명이면 페어, 3명이면 트리플! 아래 족보 칸이 밝아지고 점수가 붙어요.'},
+ {id:'element',when:()=>attaching()&&members(state.run.team).some(u=>u.elementId),text:'속성이 블라인드 속성을 이기면 ▲ 배율이 오르고, 지면 ▼ 내려가요. 같은 속성을 또 붙이면 Lv이 올라요.'},
+ {id:'recipe',when:()=>attaching()&&members(state.run.team).some(u=>recipeFor(u,c)),text:'무기 + 속성 = 조합 무기! 불은 배율, 물은 기초 점수, 번개는 턴마다 쌓여요. 이름이 흐리면 조건 미충족이에요.'},
+ {id:'next',when:()=>attaching()&&showNext(state.battle),text:'다음 블라인드 속성이 공개됐어요. ! 표시 캐릭터는 다음 블라인드에서 불리해요.'},
+ {id:'fight',when:()=>attaching()&&state.battle.turn===c.balance.turnsPerBlind,text:'마지막 턴! 전투를 누르면 점수가 목표를 넘는지 판정해요.'},
+ {id:'reward',when:()=>state.phase==='reward_reveal',text:'원하는 카드를 봐 두세요. 섞는 동안 눈으로 쫓아가면 그 카드를 가질 수 있어요!'},
+];
+let activeTip=null;
+// 띄운 팁은 닫거나 상황이 지나갈 때까지 유지하고, 한 번 띄운 팁은 다시 띄우지 않는다.
+function pickTip(){
+ if(activeTip&&!activeTip.when()){seenTips.add(activeTip.id);saveTips();activeTip=null;}
+ if(!activeTip&&!selected)activeTip=tips.find(t=>!seenTips.has(t.id)&&t.when())??null;
+ return activeTip;
+}
+function dismissTip(){if(activeTip){seenTips.add(activeTip.id);saveTips();activeTip=null;}render();}
+// 첫 블라인드 1~2턴: 점수가 가장 오르는 카드와 자리를 반짝여, 따라만 해도 첫 족보를 경험하게 한다.
+function suggestion(){
+ const b=state.battle;if(!attaching()||b.blindIndex!==0||b.turn>2||selected||b.actionsUsed>=c.balance.attachLimit)return null;
+ const base=reading().score;let best=null;
+ for(const card of b.hand)for(let slot=0;slot<c.balance.teamSize;slot++){const pv=previewFor(slot,card.instanceId);if(pv.reason)continue;const d=pv.reading.score-base;if(!best||d>best.d)best={card:card.instanceId,slot,d};}
+ return best&&best.d>0?best:null;
+}
+
 /* ── 렌더 ── */
 function render(){
  const f=fx,p=state.phase;
  app.innerHTML=p==='title'?renderTitle():p.startsWith('reward_')?renderReward():p==='run_result'?renderRunResult():renderBattle();
+ const tip=pickTip();if(tip)app.querySelector('footer.dock')?.insertAdjacentHTML('afterbegin',`<div class="tip" role="note"><p>${tip.text}</p><button type="button" data-action="tip-ok">알겠어요</button></div>`);
+ const sg=p==='attach'?suggestion():null;if(sg){app.querySelector(`.hand [data-card="${sg.card}"]`)?.classList.add('suggest');app.querySelector(`.punit[data-slot="${sg.slot}"]`)?.classList.add('suggest');}
  for(const canvas of app.querySelectorAll('[data-render]')){
   const id=canvas.dataset.render,slot=state.run.team.characters.findIndex(u=>u?.instanceId===id),unit=state.run.team.characters[slot];
   if(unit){if(f?.attached===slot)canvas.dataset.evolve='yes';renderCharacter(canvas,unit,c);}
@@ -295,7 +328,8 @@ function afterRender(f){
  if(!f)return;
  if(f.attached!==undefined){
   const el=app.querySelector(`.punit[data-slot="${f.attached}"]`);if(f.delta)floatText(el,(f.delta>0?'+':'')+f.delta,f.delta>0?'up':'down');
-  f.changes.forEach((ch,i)=>setTimeout(()=>burst(ch.text,!ch.gain),i*420));
+  const rank=ch=>!ch.gain?0:ch.major?1:ch.axis?2:3;
+  [...f.changes].sort((a,b)=>rank(a)-rank(b)).slice(0,2).forEach((ch,i)=>setTimeout(()=>burst(ch.text,!ch.gain),i*520));
   flyCard(f.cardSnapshot,el);particles(el);
  }
  if(f.accumulated){const acc=document.getElementById('acc');if(acc){bump(acc,true);floatText(acc,'+'+number(f.accumulated.gain),'up');}}
@@ -339,7 +373,7 @@ async function playResolve(){
  gauge.style.width=Math.min(100,r.score/b.target*100)+'%';
  await wait(380);
  const win=b.outcome==='win';
- verdict.textContent=win?`목표 달성 +${r.score-b.target}`:`목표까지 ${b.target-r.score}`;verdict.className='verdict '+(win?'good':'bad');
+ verdict.textContent=win?'달성!':`−${b.target-r.score}`;verdict.className='verdict '+(win?'good':'bad');
  if(zone){zone.classList.remove('hurt');void zone.offsetWidth;zone.classList.add(win?'defeated':'hurt');}
  if(!token.skip){particles(zone?.querySelector('.monster-slot'),win?'#f5c64b':'#ef6a5b',win?24:10);burst(win?'격파!':'목표 미달',!win);}
  finish.classList.remove('waiting');$('skip-hint')?.remove();resolveRun=null;
@@ -373,9 +407,9 @@ async function playShuffle(){
 function setDuel(r,previewing){
  const $=id=>document.getElementById(id);if(!$('duel'))return;const b=state.battle,gap=r.score-b.target;
  $('chips').textContent=number(r.chips);$('mult').textContent=number(r.multiplier);$('my-score').textContent=r.score;
- const v=$('verdict');v.textContent=gap>=0?`목표 달성 +${gap}`:`목표까지 ${-gap}`;v.className='verdict '+(gap>=0?'good':'bad');
+ const v=$('verdict');v.textContent=gap>=0?'달성!':`−${-gap}`;v.className='verdict '+(gap>=0?'good':'bad');
  $('gauge').style.width=Math.min(100,r.score/b.target*100)+'%';
- $('duel').classList.toggle('previewing',previewing);
+ $('duel').classList.toggle('previewing',previewing);$('blind-zone')?.classList.toggle('expanded',previewing||!!selected);
 }
 function preview(target){
  app.querySelectorAll('.hover').forEach(el=>el.classList.remove('hover'));
@@ -395,7 +429,8 @@ function preview(target){
  }
  if(pv.def?.kind==='weapon'&&pv.old.weaponId)bits.push(`<span class="loss">기존 ${nameOf(pv.old.weaponId)} 사라짐</span>`);
  if(pv.card.characterDefId&&pv.old)bits.unshift(`<span class="gain">${nameOf(pv.old.characterDefId)} → ${nameOf(pv.card.characterDefId)}, 스티커 유지</span>`);
- line.innerHTML=bits.join('');
+ // 가장 중요한 것 2개만: 잃는 것(빨강)이 먼저, 그다음 얻는 것.
+ line.innerHTML=[...bits.filter(x=>x.includes('loss')),...bits.filter(x=>!x.includes('loss'))].slice(0,2).join('');
 }
 
 /* ── 바텀시트 ── */
@@ -406,6 +441,12 @@ function guaranteedText(){
  const g=c.characterRules.guaranteedTurns,t=ts=>ts.length>1?`${ts[0]}~${ts[ts.length-1]}턴`:`${ts[0]}턴`,rest=g.slice(1).map(t);
  return rest.every(x=>x===rest[0])?`블라인드 1은 ${t(g[0])}, 이후 블라인드는 ${rest[0]}에`:g.map((ts,i)=>`블라인드 ${i+1}은 ${t(ts)}`).join(', ')+'에';
 }
+function showHelp(){openInfo(`<h2>도움말</h2><div class="help-list"><button type="button" data-help="rules">원정 규칙</button><button type="button" data-help="recipes">조합 무기</button><button type="button" data-help="combos">족보</button><button type="button" data-help="affinity">상성</button></div><p class="note">화면의 족보 칸, 속성 표시, 계산식을 눌러도 설명을 볼 수 있어요.</p><button type="button" class="ghost help-tips" data-help="tips">처음 안내 다시 보기</button>`);}
+document.getElementById('info-content').addEventListener('click',e=>{
+ const h=e.target.closest('[data-help]')?.dataset.help;if(!h)return;
+ if(h==='tips'){seenTips.clear();saveTips();activeTip=null;document.getElementById('info').close();render();return;}
+ ({rules:showRules,recipes:showRecipes,combos:showCombos,affinity:showAffinity})[h]();
+});
 function showRules(){const t=c.balance;openInfo(`<h2>원정 규칙</h2><ol>
 <li>원정은 블라인드 ${c.blinds.length}개. 블라인드마다 ${t.turnsPerBlind}턴을 진행하고, 마지막 턴이 끝나면 점수가 목표 이상인지 판정해요. 못 넘기면 원정이 끝나요.</li>
 <li>매 턴 손패 ${t.handSize}장을 받고 최대 ${t.attachLimit}번 붙여요. 남은 카드는 턴 종료 때 버려져요.</li>
@@ -447,6 +488,8 @@ app.addEventListener('click',e=>{
  if(resolveRun){resolveRun.flush();e.preventDefault();return;}
  const el=e.target.closest('[data-action]');if(!el||el.disabled)return;
  switch(el.dataset.action){
+ case 'help':showHelp();break;
+ case 'tip-ok':dismissTip();break;
  case 'rules':showRules();break;
  case 'recipes':showRecipes();break;
  case 'combos':showCombos();break;

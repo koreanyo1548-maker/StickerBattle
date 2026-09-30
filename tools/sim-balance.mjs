@@ -11,11 +11,13 @@ const P = {
   starCombo: { pair: 3, straight: 6, triple: 9 },   // × 별 레벨. 스트레이트는 컬렉션 레벨을 따른다
   comboPerLv: 1,                        // 족보 레벨업: 보너스 ×(1 + perLv·(Lv-1))
   comboMultPerLv: 0.25,                 // 족보 레벨업 배율: 성립한 족보마다 ×(1 + m·(Lv-1))
-  rewardPick: 'blind',                  // 'blind': 뒤집힌 3장 중 하나를 뽑음(무작위), 'informed': 보고 고름(비교용)
+  rewardPick: 'track',                  // 'track': 섞기 추적, 'blind': 무작위, 'informed': 항상 원하는 카드(비교용)
+  trackRate: 0.45,                      // 섞은 뒤 원하는 카드를 찾아낼 확률
+  grades: { low: { p: 0.6, levels: 1 }, mid: { p: 0.3, levels: 2 }, high: { p: 0.1, levels: 3 } },
   reward: 'mixed',                      // 'recipe': 조합 무기 Lv+1만, 'mixed': 조합 무기·족보 레벨업 중 3개 제시
   affinityPerLv: 0.25,                  // 유리 ×(1+k·Lv), 불리 ÷(1+k·Lv)
   recipeBase: 1.5, recipePerLv: 0.5,    // 조합 무기 ×(base + perLv·(Lv-1)), 조건은 생략
-  targets: [300, 900, 2200, 5000],   // 블라인드 목표 점수 후보. 못 넘기면 즉시 실패
+  targets: [300, 1100, 3000, 8000],  // 블라인드 목표 점수 (기본 난이도 후보). 못 넘기면 즉시 실패
   deck: { sword: 2, bow: 2, staff: 2, fire: 2, water: 2, lightning: 2, star: 6 },
 };
 Object.assign(P, JSON.parse(process.env.SIM ?? '{}'));   // 예: SIM='{"affinityPerLv":0}'
@@ -94,25 +96,32 @@ function runOnce(seed, policy) {
       }
     }
     scores.push(score(squad, blind, lv));
-    // 보상: 뒤집힌 카드 3장 중 1장. informed일 때만 greedy가 다음 블라인드 기준으로 가장 이득인 것을 고른다.
+    // 보상: 등급이 붙은 3장을 공개 → 뒤집어 섞기 → 1장 선택.
+    // greedy는 다음 블라인드 기준으로 가장 이득인 카드를 노린다. track이면 trackRate 확률로 추적 성공, 실패하면 나머지 2장 중 하나.
     const owned = [...new Set(squad.filter(u => u?.weapon && u.element).map(u => u.weapon + '_' + u.element))];
     const pool = P.reward === 'recipe' ? owned.slice(0, 1) : [...owned, ...KINDS];
-    const offers = shuffle(r, pool).slice(0, 3);
+    const offers = shuffle(r, pool).slice(0, 3).map(key => ({ key, grade: rollGrade(r) }));
     if (offers.length) {
       const next = { index: b + 1, element: elements[b + 1] ?? blind.element };
-      const gain = k => score(squad, next, { ...lv, [k]: (lv[k] ?? 1) + 1 });
-      const k = policy === 'greedy' && P.rewardPick === 'informed' ? offers.reduce((a, x) => gain(x) > gain(a) ? x : a) : pick(r, offers);
-      if (gain(k) <= score(squad, next, lv)) picks.dead++;   // 지금 원정대에 효과 없는 보상
-      lv[k] = (lv[k] ?? 1) + 1; picks[k.includes('_') ? 'recipe' : k]++;
+      const gain = o => score(squad, next, { ...lv, [o.key]: (lv[o.key] ?? 1) + P.grades[o.grade].levels });
+      const best = offers.reduce((a, x) => gain(x) > gain(a) ? x : a);
+      const rest = offers.filter(x => x !== best);
+      const o = policy !== 'greedy' || P.rewardPick === 'blind' ? pick(r, offers)
+        : P.rewardPick === 'informed' || !rest.length || r() < P.trackRate ? best : pick(r, rest);
+      if (gain(o) <= score(squad, next, lv)) picks.dead++;   // 지금 원정대에 효과 없는 보상
+      lv[o.key] = (lv[o.key] ?? 1) + P.grades[o.grade].levels;
+      picks[o.key.includes('_') ? 'recipe' : o.key]++; grades[o.grade]++;
     }
   }
   return scores;
 }
 
-const picks = { recipe: 0, pair: 0, collection: 0, triple: 0, dead: 0 };
+function rollGrade(r) { let x = r(); for (const [g, v] of Object.entries(P.grades)) if ((x -= v.p) < 0) return g; return 'low'; }
+const picks = { recipe: 0, pair: 0, collection: 0, triple: 0, dead: 0 }, grades = { low: 0, mid: 0, high: 0 };
 const N = Number(process.argv[2] ?? 2000), pct = (a, q) => a[Math.min(a.length - 1, Math.floor(q * a.length))];
 for (const policy of ['greedy', 'random']) {
   for (const k in picks) picks[k] = 0;
+  for (const k in grades) grades[k] = 0;
   const all = Array.from({ length: N }, (_, i) => runOnce(i + 1, policy));
   console.log(`\n[${policy}] ${N}판, 블라인드별 최종 점수 분위수`);
   console.log('블라인드   p10     p25     p50     p75     p90');
@@ -122,6 +131,6 @@ for (const policy of ['greedy', 'random']) {
   }
   // 즉시 실패 규칙: 앞 블라인드를 모두 넘겨야 다음 블라인드에 도달한다.
   const reach = P.targets.map((_, b) => all.filter(x => x.slice(0, b + 1).every((v, i) => v >= P.targets[i])).length / N);
-  console.log(`보상 선택 횟수: ${Object.entries(picks).map(([k, v]) => `${k} ${v}`).join(', ')}`);
+  console.log(`보상 선택 횟수: ${Object.entries(picks).map(([k, v]) => `${k} ${v}`).join(', ')} / 받은 등급: ${Object.entries(grades).map(([k, v]) => `${k} ${v}`).join(', ')}`);
   console.log(`목표 ${P.targets.join('/')} 누적 클리어율: ${reach.map((v, i) => `${i + 1}단계 ${(v * 100).toFixed(0)}%`).join(', ')}`);
 }

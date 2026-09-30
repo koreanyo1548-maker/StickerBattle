@@ -9,6 +9,8 @@ const CACHE_LIMIT=96;
 const starTier=lv=>lv>=5?3:lv>=3?2:lv>=1?1:0;
 // 무기 광채는 속성 Lv2부터, Lv4에서 최대.
 const glowLevel=u=>u.weaponId&&u.elementId?Math.min(u.elementLevel,4):0;
+// 무기 강화 빛은 +1부터, +5에서 최대.
+const plusGlow=u=>u.weaponId?Math.min(u.weaponPlus??0,5):0;
 function composeVisual(unit,c){
  const def=byId(c.characters,unit.characterDefId),profile=c.visuals[def.visualProfileId];
  const recipe=recipeFor(unit,c);
@@ -61,7 +63,7 @@ async function imageFor(file){
 async function renderCharacter(canvas,unit,c){
  const request={};renderRequests.set(canvas,request);
  const entries=composeVisual(unit,c);
- const key=JSON.stringify([entries.map(e=>[e.asset.id,e.asset.revision,e.anchor,e.asset.scale]),unit.elementId,glowLevel(unit)]);
+ const key=JSON.stringify([entries.map(e=>[e.asset.id,e.asset.revision,e.anchor,e.asset.scale]),unit.elementId,glowLevel(unit),plusGlow(unit)]);
  if(!cache.has(key)){
   if(cache.size>=CACHE_LIMIT)cache.delete(cache.keys().next().value);
   cache.set(key,(async()=>{
@@ -71,6 +73,8 @@ async function renderCharacter(canvas,unit,c){
      const image=await imageFor(entry.asset.file),a=entry.asset;ctx.save();ctx.translate(entry.anchor.x,entry.anchor.y);ctx.rotate(a.rotation??0);
      if(entry.layer==='weapon'&&glowLevel(unit)>=2){
       ctx.shadowColor=byId(c.elements,unit.elementId).color;ctx.shadowBlur=glowLevel(unit)*7;
+     }else if(entry.layer==='weapon'&&plusGlow(unit)>=1){
+      ctx.shadowColor='#f5c64b';ctx.shadowBlur=4+plusGlow(unit)*4;
      }
      const [sx,sy,sw,sh]=a.sourceRect,[dx,dy]=a.offset??[0,0];ctx.drawImage(image,sx,sy,sw,sh,dx,dy,sw*a.scale,sh*a.scale);ctx.restore();
     }catch{placeholder(ctx,entry,c);fallback=true;}}

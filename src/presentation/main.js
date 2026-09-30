@@ -1,6 +1,6 @@
 modules["src/presentation/main.mjs"]=(()=>{
 const {content,byId,nameOf,validateContent}=modules["src/content/data.mjs"];
-const {makeUnit,recipeFor,evaluateCombos,effectStrength,relationOf,levelOf}=modules["src/domain/rules.mjs"];
+const {makeUnit,recipeFor,weaponPower,evaluateCombos,effectStrength,relationOf,levelOf}=modules["src/domain/rules.mjs"];
 const {initialState,projectedScore,applyCommand}=modules["src/application/game.mjs"];
 const {renderCharacter}=modules["src/rendering/compositor.mjs"];
 
@@ -87,6 +87,8 @@ function buildFx(type,prev,next,events){
    if(e.type==='CharacterReplaced')f.changes.unshift({text:`${nameOf(e.to)} 교체!`,gain:true});
    if(e.type==='StarLeveled')f.changes.unshift({text:`★ Lv${e.level}`,gain:true});
    if(e.type==='ElementLeveled')f.changes.unshift({text:`속성 Lv${e.level}`,gain:true});
+   if(e.type==='WeaponEnhanced')f.changes.unshift({text:`강화 +${e.plus}`,gain:true});
+   if(e.type==='EquipmentReplaced'&&e.lostPlus)f.changes.unshift({text:`+${e.lostPlus} ${nameOf(e.from)} 사라짐`,gain:false});
    if(e.type==='ElementReplaced')f.changes.unshift({text:`${nameOf(e.from)} Lv${e.lostLevel} 사라짐`,gain:false});
   }
  }
@@ -142,14 +144,15 @@ function scoreBoard(){
 function unitBadges(u,b,final=false){
  const e=elementOf(u.elementId),rel=final?'neutral':relationOf(u.elementId,b.elementId,c),nextRel=!final&&b.nextElementId?relationOf(u.elementId,b.nextElementId,c):'neutral';
  const star=u.starLevel?`<span class="lv-star" title="별 Lv${u.starLevel}">★${u.starLevel}</span>`:'';
+ const plus=u.weaponPlus?`<span class="lv-wpn" title="${nameOf(u.weaponId)} 강화 +${u.weaponPlus}">${ic(byId(c.weapons,u.weaponId).assetId)}+${u.weaponPlus}</span>`:'';
  const el=e?`<span class="lv-el ${rel}" style="--el:${e.color}" title="${nameOf(e.id)} Lv${u.elementLevel}">${ic(e.assetId)}<b>${u.elementLevel}</b>${rel!=='neutral'?`<i class="rel">${relationMark[rel]}</i>`:''}</span>`:'';
  const warn=nextRel==='disadvantage'?'<span class="lv-warn" title="다음 블라인드에서 불리">!</span>':'';
- return `<span class="badges-l">${star}</span><span class="badges-r">${el}${warn}</span>`;
+ return `<span class="badges-l">${star}${plus}</span><span class="badges-r">${el}${warn}</span>`;
 }
 function recipeChip(u,r){
  const recipe=recipeFor(u,c);if(!recipe)return '';
  const eff=r.effects.find(x=>x.sourceInstanceId===u.instanceId),lv=levelOf(state.run.levels,recipe.id);
- return `<span class="recipe ${eff?.active?'on':''} k-${effectKind(recipe)}">${recipe.name} Lv${lv}<i>${eff?.active?'✓':'✗'}</i></span>`;
+ return `<span class="recipe ${eff?.active?'on':''} k-${effectKind(recipe)}">${u.weaponPlus?`+${u.weaponPlus} `:''}${recipe.name} Lv${lv}<i>${eff?.active?'✓':'✗'}</i></span>`;
 }
 function playerUnit(u,slot,r){
  let cls='',badge='';
@@ -173,7 +176,7 @@ function cardTip(card){
  if(card.characterDefId)return `<b>${nameOf(card.characterDefId)}</b> 빈 자리에 합류. 캐릭터 위에 놓으면 교체(스티커 유지)`;
  const s=byId(c.stickers,card.stickerDefId);
  if(s.kind==='star')return `<b>별</b> 별 Lv+1, 기초 +${c.balance.starPower}`;
- if(s.kind==='weapon')return `<b>${nameOf(s.payloadId)}</b> 기초 +${byId(c.weapons,s.payloadId).powerBonus}. 속성과 함께면 조합 무기`;
+ if(s.kind==='weapon')return `<b>${nameOf(s.payloadId)}</b> 기초 +${byId(c.weapons,s.payloadId).powerBonus}. 같은 무기에 붙이면 강화 +1(기초 +${c.balance.weaponPlusPower})`;
  return `<b>${nameOf(s.payloadId)}</b> 같은 속성이면 Lv+1, 다르면 교체하고 Lv1부터`;
 }
 function hintText(){
@@ -274,7 +277,7 @@ function unitPop(slot){
  const nextRel=b.nextElementId?relationOf(u.elementId,b.nextElementId,c):'neutral';
  return `<b class="pop-title">${nameOf(u.characterDefId)}</b>
  ${u.starLevel?`<div class="pop-row">★ 별 Lv${u.starLevel}<em>+${u.starLevel*c.balance.starPower}</em></div>`:''}
- ${u.weaponId?`<div class="pop-row">${nameOf(u.weaponId)}<em>+${byId(c.weapons,u.weaponId).powerBonus}</em></div>`:''}
+ ${u.weaponId?`<div class="pop-row">${u.weaponPlus?`+${u.weaponPlus} `:''}${nameOf(u.weaponId)}<em>+${weaponPower(u,c)}</em></div>`:''}
  ${u.elementId?`<div class="pop-row">${nameOf(u.elementId)} Lv${u.elementLevel}${rel!=='neutral'?`<em class="${rel==='advantage'?'good':'bad'}">${rel==='advantage'?'▲ 유리':'▼ 불리'} ×${number(aff.multiplier)}</em>`:'<em>상성 무관</em>'}</div>`:''}
  ${rec?`<div class="pop-recipe ${eff?.active?'on':'off'}"><b>${rec.name} Lv${lv}</b><em>${eff?.active?effValue(eff):'조건 미충족'}</em><small>${effectDescription(rec,lv)}</small></div>`:''}
  ${nextRel==='disadvantage'?'<div class="pop-row warn">! 다음 블라인드에서 불리</div>':''}
@@ -309,6 +312,7 @@ const tips=[
  {id:'element',when:()=>attaching()&&members(state.run.team).some(u=>u.elementId),text:'속성이 블라인드 속성을 이기면 ▲ 배율이 오르고, 지면 ▼ 내려가요. 같은 속성을 또 붙이면 Lv이 올라요.'},
  {id:'recipe',when:()=>attaching()&&members(state.run.team).some(u=>recipeFor(u,c)),text:'무기 + 속성 = 조합 무기! 불은 배율, 물은 기초 점수, 번개는 턴마다 쌓여요. ✗ 표시면 조건 미충족이에요. 캐릭터를 누르면 효과를 볼 수 있어요.'},
  {id:'next',when:()=>attaching()&&!!state.battle.nextElementId&&members(state.run.team).some(u=>relationOf(u.elementId,state.battle.nextElementId,c)==='disadvantage'),text:'! 표시는 다음 블라인드 속성에 불리한 캐릭터예요. 원정대는 다음 블라인드로 그대로 가니 미리 대비하세요.'},
+ {id:'enhance',when:()=>attaching()&&state.battle.hand.some(h=>h.stickerDefId&&members(state.run.team).some(u=>u.weaponId&&byId(c.stickers,h.stickerDefId).payloadId===u.weaponId)),text:'같은 무기를 든 캐릭터에게 무기를 또 붙이면 강화 +1! 무기 기초 점수가 올라요. 다른 무기를 붙이면 강화는 사라져요.'},
  {id:'fight',when:()=>attaching()&&state.battle.turn===c.balance.turnsPerBlind,text:'마지막 턴! 전투를 누르면 점수가 목표를 넘는지 판정해요.'},
  {id:'reward',when:()=>state.phase==='reward_reveal',text:'원하는 카드를 봐 두세요. 섞는 동안 눈으로 쫓아가면 그 카드를 가질 수 있어요!'},
 ];
@@ -476,12 +480,13 @@ function preview(target){
  const gained=newMatches(pv.before,pv.after).sort((a,b)=>b.priority-a.priority)[0],lost=lostMatches(pv.before,pv.after).sort((a,b)=>b.priority-a.priority)[0];
  const relMark=rel==='advantage'?' ▲':rel==='disadvantage'?' ▼':'';
  const word=pv.def?.kind==='element'&&pv.old.elementId&&pv.old.elementId!==pv.def.payloadId?['loss',`${nameOf(pv.old.elementId)} Lv${pv.old.elementLevel} 사라짐`]
-  :pv.def?.kind==='weapon'&&pv.old.weaponId?['loss',`${nameOf(pv.old.weaponId)} 교체`]
+  :pv.def?.kind==='weapon'&&pv.old.weaponId&&pv.old.weaponId!==pv.def.payloadId?['loss',pv.old.weaponPlus?`+${pv.old.weaponPlus} ${nameOf(pv.old.weaponId)} 사라짐`:`${nameOf(pv.old.weaponId)} 교체`]
   :lost?['loss',`${comboName(lost)} 해제`]
   :pv.card.characterDefId&&pv.old?['gain',`${nameOf(pv.card.characterDefId)}로 교체, 스티커 유지`]
   :rec&&oldRec?.id!==rec.id?['gain',`${rec.name} 완성`]
   :gained?['gain',`${comboName(gained)} +${number(gained.bonus)}`]
   :pv.def?.kind==='star'?['gain',`★ Lv${pv.unit.starLevel}`]
+  :pv.def?.kind==='weapon'&&pv.old.weaponId===pv.def.payloadId?['gain',`${nameOf(pv.def.payloadId)} 강화 +${pv.unit.weaponPlus}`]
   :pv.def?.kind==='element'&&pv.old.elementId===pv.def.payloadId?[rel==='disadvantage'?'loss':'gain',`${nameOf(pv.def.payloadId)} Lv${pv.unit.elementLevel}${relMark}`]
   :rel!=='neutral'?[rel==='advantage'?'gain':'loss',`상성 ${rel==='advantage'?'유리 ▲':'불리 ▼'}`]
   :pv.def?.kind==='element'?['gain',`${nameOf(pv.def.payloadId)} Lv${pv.unit.elementLevel}`]:null;
@@ -505,7 +510,7 @@ function showRules(){const t=c.balance;openInfo(`<h2>원정 규칙</h2><ol>
 <li>${guaranteedText()} 캐릭터 카드가 꼭 나오고, 다른 턴에도 가끔 나와요. 빈 자리에 놓거나 교체할 수 있고, 교체해도 스티커와 레벨은 옮겨져요.</li>
 <li><b>별</b>: 붙일 때마다 Lv+1. 캐릭터 기초 점수가 Lv당 +${t.starPower}.</li>
 <li><b>속성</b>: 같은 속성을 붙이면 Lv+1, 다른 속성을 붙이면 교체되고 Lv1부터 다시 시작해요.</li>
-<li><b>무기</b>: 기초 +${t.weaponPower}. 무기와 속성이 함께 있으면 조합 무기가 돼요.</li>
+<li><b>무기</b>: 기초 +${t.weaponPower}. 같은 무기를 또 붙이면 강화 +1(기초 +${t.weaponPlusPower}씩), 다른 무기를 붙이면 교체되고 강화는 +0부터. 무기와 속성이 함께 있으면 조합 무기가 돼요.</li>
 <li><b>상성</b>: ${cycleText()}. 블라인드 속성을 이기면 ×(1+${t.affinityPerLevel}×속성Lv), 지면 그만큼 나눠요.</li>
 <li>점수는 <b>기초 × 배율</b>. 기초는 캐릭터·무기·별·페어/트리플 보너스·물 조합 효과·누적의 합, 배율은 페어/트리플 레벨·불 조합 효과·상성을 곱한 값이에요.</li>
 <li>원정대는 블라인드가 바뀌어도 그대로예요. 블라인드를 넘기면 보상 카드 3장을 섞어 1장을 뽑아요.</li></ol><p class="note">현재 수치는 재미와 균형 확인용 임시값입니다.</p><button type="button" class="ghost help-tips" data-help="tips">처음 안내 다시 보기</button>`);}
@@ -520,7 +525,7 @@ function showRecipes(){openInfo(`<h2>조합 무기</h2><p>무기와 속성을 �
 function inspect(slot){
  const u=state.run.team.characters[slot];if(!u)return;
  const d=byId(c.characters,u.characterDefId),rec=recipeFor(u,c),b=state.battle,rel=relationOf(u.elementId,b.elementId,c);
- openInfo(`<h2>${nameOf(d.id)}</h2><table class="table"><tr><td>기본</td><td>${d.basePower}</td></tr><tr><td>무기</td><td>${u.weaponId?`${nameOf(u.weaponId)} +${byId(c.weapons,u.weaponId).powerBonus}`:'없음'}</td></tr><tr><td>별</td><td>Lv${u.starLevel} +${u.starLevel*c.balance.starPower}</td></tr><tr><td>속성</td><td>${u.elementId?`${nameOf(u.elementId)} Lv${u.elementLevel}${rel!=='neutral'?` · 이번 블라인드 ${rel==='advantage'?'유리':'불리'}`:''}`:'없음'}</td></tr></table>${rec?`<div class="recipe-card"><b>${rec.name} Lv${levelOf(state.run.levels,rec.id)}</b><p>${effectDescription(rec,levelOf(state.run.levels,rec.id))}</p></div>`:'<p class="note">무기와 속성을 함께 붙이면 조합 무기가 돼요.</p>'}`);
+ openInfo(`<h2>${nameOf(d.id)}</h2><table class="table"><tr><td>기본</td><td>${d.basePower}</td></tr><tr><td>무기</td><td>${u.weaponId?`${u.weaponPlus?`+${u.weaponPlus} `:''}${nameOf(u.weaponId)} +${weaponPower(u,c)}`:'없음'}</td></tr><tr><td>별</td><td>Lv${u.starLevel} +${u.starLevel*c.balance.starPower}</td></tr><tr><td>속성</td><td>${u.elementId?`${nameOf(u.elementId)} Lv${u.elementLevel}${rel!=='neutral'?` · 이번 블라인드 ${rel==='advantage'?'유리':'불리'}`:''}`:'없음'}</td></tr></table>${rec?`<div class="recipe-card"><b>${rec.name} Lv${levelOf(state.run.levels,rec.id)}</b><p>${effectDescription(rec,levelOf(state.run.levels,rec.id))}</p></div>`:'<p class="note">무기와 속성을 함께 붙이면 조합 무기가 돼요.</p>'}`);
 }
 function showBreakdown(){
  const r=reading(),b=state.battle;

@@ -14,7 +14,7 @@ const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} != ${b}`);
 
 test('콘텐츠 검증', () => assert.equal(data.validateContent(), true));
 
-test('붙이기: 별과 속성은 레벨, 다른 속성은 교체 후 Lv1, 같은 무기는 거절', () => {
+test('붙이기: 별과 속성은 레벨, 다른 속성은 교체 후 Lv1, 같은 무기는 강화·다른 무기는 교체 후 +0', () => {
   let u = unit(0, 'human_warrior');
   u = rules.attachUnit(u, sticker('star'), c).unit; u = rules.attachUnit(u, sticker('star'), c).unit;
   assert.equal(u.starLevel, 2);
@@ -23,8 +23,12 @@ test('붙이기: 별과 속성은 레벨, 다른 속성은 교체 후 Lv1, 같�
   u = rules.attachUnit(u, sticker('water'), c).unit;
   assert.deepEqual([u.elementId, u.elementLevel], ['element_water', 1]);
   u = rules.attachUnit(u, sticker('sword'), c).unit;
-  assert.equal(rules.attachUnit(u, sticker('sword'), c).reason, 'same');
-  assert.equal(rules.attachUnit(u, sticker('bow'), c).unit.weaponId, 'weapon_bow');
+  assert.deepEqual([u.weaponId, u.weaponPlus], ['weapon_sword', 0]);
+  u = rules.attachUnit(u, sticker('sword'), c).unit; u = rules.attachUnit(u, sticker('sword'), c).unit;
+  assert.deepEqual([u.weaponId, u.weaponPlus], ['weapon_sword', 2]);
+  assert.equal(rules.weaponPower(u, c), c.balance.weaponPower + 2 * c.balance.weaponPlusPower);
+  u = rules.attachUnit(u, sticker('bow'), c).unit;
+  assert.deepEqual([u.weaponId, u.weaponPlus], ['weapon_bow', 0]);
 });
 
 test('별 족보: 같은 레벨 트리플·페어, 연속 레벨 스트레이트, 보너스는 별 레벨 비례', () => {
@@ -157,4 +161,20 @@ test('마지막 턴 예상 점수에는 판정 직전에 더해지는 번개 누
   run('EndTurn');
   assert.equal(s.phase, 'resolve');
   assert.equal(s.battle.lastScore.score, projected);
+});
+
+test('무기 강화: 교체 캐릭터로 옮겨지고 점수에 반영된다', () => {
+  let s = game.initialState(), n = 0;
+  const run = (type, p = {}) => { const r = game.applyCommand(s, { type, commandId: `w${n++}`, ...p }, c); assert.equal(r.error, null, `${type}: ${r.error}`); s = r.state; return r; };
+  run('StartRun', { seed: 5 });
+  s = structuredClone(s);
+  s.run.team.characters = [unit(0, 'human_warrior', { weaponId: 'weapon_sword', weaponPlus: 1 }), null, null];
+  s.battle.hand = [{ instanceId: 'x1', stickerDefId: 'sticker_sword' }, { instanceId: 'x2', characterDefId: 'char_elf_mage' }];
+  const before = game.projectedScore(s.run, s.battle, c).score;
+  const r = run('AttachSticker', { stickerInstanceId: 'x1', targetInstanceId: 'u0' });
+  assert.deepEqual(r.events.map(e => e.type).slice(0, 2), ['StickerAttached', 'WeaponEnhanced']);
+  assert.equal(s.run.team.characters[0].weaponPlus, 2);
+  assert.equal(game.projectedScore(s.run, s.battle, c).score - before, c.balance.weaponPlusPower);
+  run('PlaceCharacter', { cardInstanceId: 'x2', targetSlot: 0 });
+  assert.deepEqual([s.run.team.characters[0].characterDefId, s.run.team.characters[0].weaponPlus], ['char_elf_mage', 2]);
 });

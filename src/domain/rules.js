@@ -1,46 +1,50 @@
 modules["src/domain/rules.mjs"]=(()=>{
 const {byId}=modules["src/content/data.mjs"];
 
-// 속성 칸은 캐릭터당 1개. 무기가 있으면 조합 효과, 무기 없이 속성만 있으면 중첩당 전투력.
-function makeUnit(id,defId,c){return {instanceId:id,characterDefId:defId,weaponId:null,elementId:null,stars:c.balance.startStars,elementStacks:0,bodyElementId:null,bodyElementStacks:0};}
-function attachmentReason(unit,sticker,c,elementSlot='weapon'){
+// 캐릭터 1명: 무기 1칸, 속성 1칸(레벨), 별 레벨. 레벨 상한은 없다.
+function makeUnit(id,defId){return {instanceId:id,characterDefId:defId,weaponId:null,elementId:null,elementLevel:0,starLevel:0};}
+function attachmentReason(unit,sticker,c){
  if(!unit)return 'target';if(!sticker)return 'card';
- if(sticker.kind==='star')return unit.stars+sticker.starAmount>c.balance.maxStars?'maxStars':null;
- const slot=sticker.kind==='weapon'?'weaponId':'elementId';
- if(unit[slot]===sticker.payloadId){if(sticker.kind==='weapon')return 'same';if(elementStacks(unit)>=c.balance.maxElementStacks)return 'maxElementStacks';}
  if(sticker.kind==='weapon'){
+  if(unit.weaponId===sticker.payloadId&&c.attachRules.sameWeapon==='reject')return 'same';
   const def=byId(c.characters,unit.characterDefId),w=byId(c.weapons,sticker.payloadId);
   if(!w.compatibleRigIds.includes(c.visuals[def.visualProfileId].rigId))return 'rig';
  }
  return null;
 }
-function attachUnit(unit,sticker,c,elementSlot='weapon'){
- const reason=attachmentReason(unit,sticker,c,elementSlot);if(reason)return {reason,unit};
- if(sticker.kind==='element')return {reason:null,unit:{...unit,elementId:sticker.payloadId,elementStacks:unit.elementId===sticker.payloadId?elementStacks(unit)+1:1}};
- return {reason:null,unit:sticker.kind==='star'?{...unit,stars:unit.stars+sticker.starAmount}:{...unit,[sticker.kind==='weapon'?'weaponId':'elementId']:sticker.payloadId}};
+// 별은 Lv+1. 같은 속성은 Lv+1, 다른 속성은 교체하고 Lv1부터. 무기는 장착·교체.
+function attachUnit(unit,sticker,c){
+ const reason=attachmentReason(unit,sticker,c);if(reason)return {reason,unit};
+ if(sticker.kind==='star')return {reason:null,unit:{...unit,starLevel:unit.starLevel+sticker.starAmount}};
+ if(sticker.kind==='element')return {reason:null,unit:{...unit,elementId:sticker.payloadId,elementLevel:unit.elementId===sticker.payloadId?unit.elementLevel+1:1}};
+ return {reason:null,unit:{...unit,weaponId:sticker.payloadId}};
 }
-// 빈 슬롯·0별 제외. 축별 최고 우선순위 하나, 복합은 장착 3축의 완성 수로 판정한다.
-function elementSet(u){return u.elementId?[u.elementId]:[];}
-function elementPower(u,c){return u.elementId&&!u.weaponId?elementStacks(u)*c.balance.bodyElementPower:0;}
-function distinctPick(lists){for(const a of lists[0])for(const b of lists[1])if(b!==a)for(const x of lists[2])if(x!==a&&x!==b)return true;return false;}
-function evaluateCombos(team,c){
- const found=[];
+const members=team=>team.characters.filter(Boolean);
+// 런 레벨표: 레시피 ID와 족보 종류(pair·collection·triple)별 레벨. 없으면 Lv1.
+const levelOf=(levels,key)=>levels?.[key]??1;
+const byLevel=(value,perLevel,level)=>value+perLevel*(level-1);
+function axisValue(u,axis,c){
+ const def=byId(c.characters,u.characterDefId);
+ return axis==='race'?def.raceId:axis==='job'?def.jobId:axis==='weapon'?u.weaponId:axis==='element'?u.elementId:u.starLevel||null;
+}
+// 축마다 가장 높은 족보 하나. 별 축은 레벨로 판정한다: 같은 레벨 페어·트리플, 연속 레벨 스트레이트.
+function evaluateCombos(team,c,levels){
+ const found=[],us=members(team);
  for(const axis of c.comboAxes){
-  const groups=new Map(),values=[],perMember=[];
-  for(const u of team.characters.filter(Boolean)){
-   const def=byId(c.characters,u.characterDefId);
-   const list=(axis==='element'?elementSet(u):[axis==='race'?def.raceId:axis==='job'?def.jobId:axis==='weapon'?u.weaponId:u.stars]).filter(Boolean);
-   if(!list.length)continue;
-   perMember.push(list);values.push(list[0]);
-   for(const v of list){if(!groups.has(v))groups.set(v,[]);groups.get(v).push(u.instanceId);}
-  }
+  const entries=us.map(u=>({id:u.instanceId,value:axisValue(u,axis,c)})).filter(x=>x.value);
+  const groups=new Map();for(const x of entries){if(!groups.has(x.value))groups.set(x.value,[]);groups.get(x.value).push(x.id);}
   const eligible=[];
   for(const rule of c.combos.filter(r=>r.axis===axis)){
-   const add=(value,members)=>eligible.push({ruleId:rule.id,axis,kind:rule.kind,matchedValueId:value,memberInstanceIds:members,bonus:rule.flatPowerBonus,threshold:rule.threshold,priority:rule.priority,complete:rule.threshold===3});
+   const add=(value,ids,starLevel)=>{
+    const lv=levelOf(levels,rule.levelKind),bonus=rule.flatPowerBonus*(rule.scaleByStarLevel?starLevel:1)*byLevel(1,c.balance.comboBonusPerLevel,lv);
+    eligible.push({ruleId:rule.id,axis,kind:rule.kind,levelKind:rule.levelKind,level:lv,matchedValueId:value,memberInstanceIds:ids,bonus,multiplier:byLevel(1,c.balance.comboMultPerLevel,lv),priority:rule.priority,complete:rule.threshold===3});
+   };
    if(rule.kind==='pair'||rule.kind==='triple'){
-    for(const [value,members] of groups)if(members.length>=rule.threshold)add(value,members);
-   }else if(perMember.length===3&&distinctPick(perMember)){
-    if(rule.kind==='collection'||(rule.kind==='straight'&&[...values].sort((a,b)=>a-b).every((v,i)=>v===i+1)))add(null,team.characters.filter(Boolean).map(u=>u.instanceId));
+    for(const [value,ids] of groups)if(ids.length>=rule.threshold)add(value,ids,value);
+   }else if(entries.length===3&&groups.size===3){
+    const sorted=entries.map(x=>x.value).sort((a,b)=>a-b);
+    if(rule.kind==='collection')add(null,entries.map(x=>x.id),0);
+    else if(sorted[1]===sorted[0]+1&&sorted[2]===sorted[1]+1)add(null,entries.map(x=>x.id),sorted[1]);
    }
   }
   eligible.sort((a,b)=>b.priority-a.priority||a.ruleId.localeCompare(b.ruleId));
@@ -48,82 +52,74 @@ function evaluateCombos(team,c){
  }
  return found;
 }
-function evaluateCompound(matches,c){
- const candidates=c.compoundCombos.map(rule=>({rule,axes:matches.filter(m=>rule.axes.includes(m.axis)&&m.complete).map(m=>m.axis)})).filter(x=>x.axes.length>=x.rule.threshold).sort((a,b)=>b.rule.threshold-a.rule.threshold);
- const best=candidates[0];return best?{ruleId:best.rule.id,kind:best.rule.kind,axes:best.axes,bonus:best.rule.flatPowerBonus}:null;
-}
-function unitPower(u,c){return byId(c.characters,u.characterDefId).basePower+(u.weaponId?byId(c.weapons,u.weaponId).powerBonus:0)+u.stars*c.balance.starPower+elementPower(u,c);}
-function calculateTeamPower(team,c){
- const matches=evaluateCombos(team,c),compound=evaluateCompound(matches,c);
- const base=team.characters.filter(Boolean).reduce((n,u)=>n+byId(c.characters,u.characterDefId).basePower,0),weapons=team.characters.filter(Boolean).reduce((n,u)=>n+(u.weaponId?byId(c.weapons,u.weaponId).powerBonus:0),0),stars=team.characters.filter(Boolean).reduce((n,u)=>n+u.stars*c.balance.starPower,0),elements=team.characters.filter(Boolean).reduce((n,u)=>n+elementPower(u,c),0);
- const growth=team.growth??0;
- const basicCombos=matches.reduce((n,m)=>n+m.bonus,0),compoundBonus=compound?.bonus??0,combos=basicCombos+compoundBonus;
- return {base,weapons,stars,elements,growth,basicCombos,compoundBonus,compound,combos,total:base+weapons+stars+elements+combos+growth,matches};
-}
-function elementStacks(unit){return unit.elementId?Math.max(1,unit.elementStacks??1):0;}
 function recipeFor(unit,c){return c.weaponRecipes.find(r=>r.weaponId===unit.weaponId&&r.elementId===unit.elementId)??null;}
-function effectStrength(unit,c){return 1+(Math.max(1,elementStacks(unit))-1)*c.balance.elementBoostPercent/100;}
-function effectCount(effect,team,own,opponent){
+function effectCount(effect,team,matches){
  switch(effect.condition){
- case 'combo':return own.matches.some(m=>m.axis===effect.axis&&m.kind===effect.kind)?1:0;
- case 'completeAxes':return own.matches.filter(m=>['weapon','element','star'].includes(m.axis)&&m.complete).length;
- case 'lowerScore':return own.total<opponent.total?1:0;
- case 'collections':return own.matches.filter(m=>['collection','straight'].includes(m.kind)).length;
- case 'allStars':return team.characters.filter(Boolean).length===3&&team.characters.every(u=>u&&u.stars>=1)?1:0;
- case 'pairs':return own.matches.filter(m=>m.kind==='pair').length;
+ case 'combo':return matches.some(m=>m.axis===effect.axis&&effect.kinds.includes(m.kind))?1:0;
+ case 'completeAxes':return matches.filter(m=>effect.axes.includes(m.axis)&&m.complete).length;
+ case 'collections':return matches.filter(m=>m.levelKind==='collection').length;
+ case 'starBalance':{const us=members(team),ls=us.map(u=>u.starLevel);return us.length===3&&Math.min(...ls)>=1&&Math.max(...ls)-Math.min(...ls)<=effect.maxGap?1:0;}
+ case 'always':return 1;
  default:throw Error('알 수 없는 효과 조건');
  }
 }
-// 동일한 전투 전 스냅샷으로 양측 조건 판정. 미리보기는 상태를 변경하지 않는다.
-function evaluateWeaponEffects(team,own,opponent,c){
- let flat=0,multiplier=1,growthGain=0;const effects=[];
- for(const unit of team.characters.filter(Boolean)){
+function effectScale(effect,team){
+ const ls=members(team).map(u=>u.starLevel);
+ return effect.scaleBy==='starLevelSum'?ls.reduce((a,b)=>a+b,0):effect.scaleBy==='maxStarLevel'?Math.max(0,...ls):1;
+}
+// 조합 무기 효과. 같은 레시피를 든 캐릭터가 여럿이면 각각 적용하고 레벨은 공유한다.
+function evaluateWeaponEffects(team,matches,c,levels){
+ let flat=0,multiplier=1,targetPercent=0,accumulateGain=0;const effects=[];
+ for(const unit of members(team)){
   const recipe=recipeFor(unit,c);if(!recipe)continue;
-  const effect=byId(c.weaponEffects,recipe.effectId),count=effectCount(effect,team,own,opponent),strength=effectStrength(unit,c);
-  const perUnit=effect.operation==='multiply'?1+(effect.value-1)*strength:effect.value*strength;
-  const amount=effect.operation==='multiply'?Math.pow(perUnit,count):perUnit*count;
-  if(effect.operation==='multiply')multiplier*=amount;else if(effect.operation==='add')flat+=amount;else growthGain+=amount;
-  effects.push({sourceInstanceId:unit.instanceId,recipeId:recipe.id,name:recipe.name,effectId:effect.id,operation:effect.operation,stacks:elementStacks(unit),count,active:count>0,amount});
+  const effect=byId(c.weaponEffects,recipe.effectId),level=levelOf(levels,recipe.id),strength=byLevel(effect.value,effect.perLevel,level);
+  const count=effectCount(effect,team,matches),scale=effectScale(effect,team);
+  const amount=effect.operation==='multiply'?Math.pow(strength,count):strength*count*scale;
+  if(effect.operation==='multiply')multiplier*=amount;else if(effect.operation==='add')flat+=amount;else if(effect.operation==='targetPercent')targetPercent+=amount;else accumulateGain+=amount;
+  effects.push({sourceInstanceId:unit.instanceId,recipeId:recipe.id,name:recipe.name,effectId:effect.id,operation:effect.operation,level,count,active:count>0&&(effect.operation==='multiply'||amount>0),amount});
  }
- return {flat,multiplier,growthGain,effects};
+ return {flat,multiplier,targetPercent,accumulateGain,effects};
 }
-function affinityCounts(team,axis,c){
- const m=new Map(),add=(k,n)=>{if(k&&n>0)m.set(k,(m.get(k)??0)+n);};
- for(const u of team.characters.filter(Boolean)){
-  if(axis==='element')add(u.elementId,elementStacks(u));
-  else if(axis==='weapon')add(u.weaponId,1);else add(byId(c.characters,u.characterDefId).raceId,1);
+// 캐릭터마다 블라인드 속성과 비교한다. 유리 ×(1+k·Lv), 불리 ÷(1+k·Lv), 무관 ×1.
+function relationOf(elementId,blindElementId,c){
+ if(!elementId||!blindElementId)return 'neutral';
+ return c.affinity.beats[elementId]===blindElementId?'advantage':c.affinity.beats[blindElementId]===elementId?'disadvantage':'neutral';
+}
+function evaluateAffinity(team,blindElementId,c){
+ let total=1;const units=[];
+ for(const u of members(team)){
+  const relation=relationOf(u.elementId,blindElementId,c),f=1+c.balance.affinityPerLevel*u.elementLevel;
+  const multiplier=relation==='advantage'?f:relation==='disadvantage'?1/f:1;
+  total*=multiplier;units.push({instanceId:u.instanceId,relation,multiplier});
  }
- return m;
+ return {total,units};
 }
-// 축마다 (내 x의 수 × x가 이기는 상대 속성의 수)를 유리 쌍으로 센다.
-function evaluateAffinity(team,opponentTeam,c){
- let total=1;const axes=[];
- for(const [axis,beats] of Object.entries(c.affinity.beats)){
-  const own=affinityCounts(team,axis,c),opp=affinityCounts(opponentTeam,axis,c);let pairs=0;
-  for(const [k,n] of own)pairs+=n*(opp.get(beats[k])??0);
-  const multiplier=1+pairs*c.balance.affinityPercent/100;total*=multiplier;axes.push({axis,pairs,multiplier});
- }
- return {total,axes};
+// 점수 = floor(기초 × 배율) + 목표 비례 보너스. 기초 = 캐릭터·무기·별 + 족보 + 물 효과 + 번개 누적.
+// progress: {levels, accumulated}. blind: {target, elementId}.
+function scoreTeam(team,blind,progress,c){
+ const levels=progress?.levels??{},us=members(team);
+ const matches=evaluateCombos(team,c,levels),effects=evaluateWeaponEffects(team,matches,c,levels),affinity=evaluateAffinity(team,blind.elementId,c);
+ const base=us.reduce((n,u)=>n+byId(c.characters,u.characterDefId).basePower,0);
+ const weapons=us.reduce((n,u)=>n+(u.weaponId?byId(c.weapons,u.weaponId).powerBonus:0),0);
+ const stars=us.reduce((n,u)=>n+u.starLevel*c.balance.starPower,0);
+ const combos=matches.reduce((n,m)=>n+m.bonus,0),accumulated=progress?.accumulated??0;
+ const chips=base+weapons+stars+combos+effects.flat+accumulated;
+ const comboMultiplier=matches.reduce((n,m)=>n*m.multiplier,1);
+ const multiplier=comboMultiplier*effects.multiplier*affinity.total;
+ // 모든 배율을 합성한 뒤에만 소수점 버림. 경계의 부동소수점 오차만 보정한다.
+ const floor=v=>Math.floor(v+Number.EPSILON*Math.max(1,Math.abs(v))*8);
+ const targetBonus=floor(blind.target*effects.targetPercent/100);
+ return {base,weapons,stars,combos,flat:effects.flat,accumulated,chips,comboMultiplier,effectMultiplier:effects.multiplier,affinity,multiplier,targetBonus,score:floor(chips*multiplier)+targetBonus,matches,effects:effects.effects,accumulateGain:effects.accumulateGain};
 }
-function calculateAttack(team,own,opponent,c,opponentTeam){
- const result=evaluateWeaponEffects(team,own,opponent,c),subtotal=own.total+result.flat,affinity=evaluateAffinity(team,opponentTeam,c);
- // 모든 효과를 합성한 최종 점수에서만 소수점 버림. 경계의 부동소수점 오차만 보정한다.
- const raw=subtotal*result.multiplier*affinity.total,score=Math.floor(raw+Number.EPSILON*Math.max(1,Math.abs(raw))*8);
- return {base:own,...result,affinity,totalMultiplier:result.multiplier*affinity.total,subtotal,score};
-}
-function resolveCombat(b,c){
- const p=calculateTeamPower(b.player,c),e=calculateTeamPower(b.enemy,c);
- const player=calculateAttack(b.player,p,e,c,b.enemy),enemy=calculateAttack(b.enemy,e,p,c,b.player);
- const difference=player.score-enemy.score,damageToEnemy=Math.max(0,difference),damageToPlayer=Math.max(0,-difference);
- const nextHp={player:Math.max(0,b.player.hp-damageToPlayer),enemy:Math.max(0,b.enemy.hp-damageToEnemy)};
- const nextGrowth={player:(b.player.growth??0)+player.growthGain,enemy:(b.enemy.growth??0)+enemy.growthGain};let outcome=null;
- if(nextHp.player<=0||nextHp.enemy<=0)outcome=nextHp.player<=0&&nextHp.enemy<=0?'draw':nextHp.enemy<=0?'win':'lose';
- else if(b.turn>=c.balance.maxTurns)outcome=nextHp.player===nextHp.enemy?'draw':nextHp.player>nextHp.enemy?'win':'lose';
- return {damageToPlayer,damageToEnemy,nextHp,nextGrowth,player,enemy,difference,outcome};
+// 턴 종료 시 번개 조합 무기가 쌓는 양.
+function turnEndGain(team,progress,c){
+ const levels=progress?.levels??{};
+ return evaluateWeaponEffects(team,evaluateCombos(team,c,levels),c,levels).accumulateGain;
 }
 // 시드 기반 RNG: 순수한 상태 입출력. 같은 시드와 명령은 같은 결과를 만든다.
 function nextRandom(seed){let x=seed>>>0||1;x^=x<<13;x^=x>>>17;x^=x<<5;return {seed:x>>>0,value:(x>>>0)/4294967296};}
 function shuffle(list,seed){const result=[...list];for(let i=result.length-1;i>0;i--){const r=nextRandom(seed);seed=r.seed;const j=Math.floor(r.value*(i+1));[result[i],result[j]]=[result[j],result[i]];}return {list:result,seed};}
+function weightedPick(items,seed){const r=nextRandom(seed);let x=r.value*items.reduce((n,i)=>n+i.weight,0);for(const item of items)if((x-=item.weight)<0)return {item,seed:r.seed};return {item:items[items.length-1],seed:r.seed};}
 function drawCards(b,count){
  for(let i=0;i<count;i++){
   if(!b.drawPile.length&&b.discardPile.length){const r=shuffle(b.discardPile,b.rngState);b.drawPile=r.list;b.rngState=r.seed;b.discardPile=[];}
@@ -131,4 +127,4 @@ function drawCards(b,count){
  }
 }
 
-return {evaluateAffinity,elementSet,elementPower,makeUnit,attachmentReason,attachUnit,evaluateCombos,evaluateCompound,unitPower,calculateTeamPower,elementStacks,recipeFor,effectStrength,evaluateWeaponEffects,calculateAttack,resolveCombat,nextRandom,shuffle,drawCards};})();
+return {makeUnit,attachmentReason,attachUnit,levelOf,evaluateCombos,recipeFor,evaluateWeaponEffects,relationOf,evaluateAffinity,scoreTeam,turnEndGain,nextRandom,shuffle,weightedPick,drawCards};})();

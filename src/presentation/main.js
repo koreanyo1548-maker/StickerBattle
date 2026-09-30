@@ -27,6 +27,9 @@ const monsterOf=id=>byId(c.monsters,id);
 
 function toast(text){const el=document.getElementById('toast');el.textContent=text;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),2400);}
 function comboName(m){const v=m.matchedValueId;return `${axisLabels[m.axis]} ${v==null?'':m.axis==='star'?`Lv${v} `:nameOf(v)+' '}${comboLabels[m.kind]}`;}
+// after에 새로 생긴 것(같은 규칙·같은 값이 before에 없음)과, before에서 사라지거나 한 단계 내려간 것.
+const newMatches=(before,after)=>after.filter(m=>!before.some(x=>x.ruleId===m.ruleId&&x.matchedValueId===m.matchedValueId));
+const lostMatches=(before,after)=>before.filter(m=>{const a=after.find(x=>x.axis===m.axis);return !a||a.priority<m.priority;});
 function comboChanges(before,after){
  const out=[];
  after.forEach(m=>{if(!before.some(b=>b.ruleId===m.ruleId&&b.matchedValueId===m.matchedValueId))out.push({axis:m.axis,text:`${comboName(m)} +${number(m.bonus)}`,gain:true});});
@@ -73,8 +76,12 @@ function buildFx(type,prev,next,events){
  if(type==='AttachSticker'||type==='PlaceCharacter'){
   const slot=type==='PlaceCharacter'?events.find(e=>e.slot!==undefined).slot:prev.run.team.characters.findIndex(u=>u?.instanceId===events[0].targetInstanceId);
   f.attached=slot;
-  f.delta=projectedScore(next.run,next.battle,c).score-projectedScore(prev.run,prev.battle,c).score;
-  f.changes=comboChanges(evaluateCombos(prev.run.team,c,prev.run.levels),evaluateCombos(next.run.team,c,next.run.levels));
+  const pb=projectedScore(prev.run,prev.battle,c),nb=projectedScore(next.run,next.battle,c);
+  f.delta=nb.score-pb.score;f.changes=comboChanges(pb.matches,nb.matches);f.comboDelta=nb.combos-pb.combos;
+  // 가운데에 띄울 큰 사건: 새로 생긴 3명짜리(컬렉션·스트레이트·트리플) 또는 조합 무기 완성.
+  f.newBig=newMatches(pb.matches,nb.matches).filter(m=>m.complete).sort((a,b)=>b.priority-a.priority)[0]?.kind??null;
+  const was=prev.run.team.characters[slot],now=next.run.team.characters[slot],rec=now&&recipeFor(now,c);
+  if(rec&&(!was||recipeFor(was,c)?.id!==rec.id))f.recipe=rec.name;
   for(const e of events){
    if(e.type==='CharacterPlaced')f.changes.unshift({text:`${nameOf(e.characterDefId)} 합류!`,gain:true});
    if(e.type==='CharacterReplaced')f.changes.unshift({text:`${nameOf(e.to)} 교체!`,gain:true});
@@ -156,37 +163,37 @@ function playerZone(){
  const r=reading(),acc=state.run.accumulated;
  return `<section class="player-zone"><div class="zone-head"><strong>${uiIcon('sword')} 우리 원정대</strong>${acc?`<span class="acc" id="acc" title="번개 조합 무기가 쌓은 기초 점수">누적 +${number(acc)}</span>`:'<span class="acc" id="acc" hidden></span>'}</div><div class="party">${state.run.team.characters.map((u,slot)=>playerUnit(u,slot,r)).join('')}</div></section>`;
 }
+// 5칸은 성립하면 불이 켜지고(2명짜리 파랑, 3명짜리 금색), 오른쪽에 보너스 합계만. 자세한 내용은 말풍선.
 function comboTray(){
  const r=reading(),burst=new Set((fx?.changes??[]).filter(x=>x.gain&&x.axis).map(x=>x.axis));
- const lv=k=>levelOf(state.run.levels,k);
- return `<button type="button" class="tray" data-action="combos" aria-label="족보 설명 보기">${c.comboAxes.map(axis=>{const m=r.matches.find(x=>x.axis===axis);return `<span class="axis ${m?(m.complete?'full':'part'):''} ${burst.has(axis)?'burst':''}"><small>${axisLabels[axis]}</small><b>${m?comboLabels[m.kind]:'—'}</b><em>${m?'+'+number(m.bonus):''}</em></span>`;}).join('')}
- <span class="combo-levels">${c.comboLevelKinds.map(k=>`<span class="${lv(k)>1?'up':''}">${levelKindLabels[k]}<b>Lv${lv(k)}</b></span>`).join('')}</span></button>`;
+ return `<button type="button" class="tray" data-action="combos" aria-label="페어·트리플 보너스 +${number(r.combos)}, 자세히 보기"><span class="lights">${c.comboAxes.map(axis=>{const m=r.matches.find(x=>x.axis===axis);return `<span class="light ${m?(m.complete?'full':'part'):''} ${burst.has(axis)?'lit':''}"><small>${axisLabels[axis]}</small><i></i></span>`;}).join('')}</span><b class="tray-total ${r.combos?'on':''}" id="tray-total">+${number(r.combos)}</b></button>`;
+}
+// 고른 카드의 이름과 효과 한 줄.
+function cardTip(card){
+ if(card.characterDefId)return `<b>${nameOf(card.characterDefId)}</b> 빈 자리에 합류. 캐릭터 위에 놓으면 교체(스티커 유지)`;
+ const s=byId(c.stickers,card.stickerDefId);
+ if(s.kind==='star')return `<b>별</b> 별 Lv+1, 기초 +${c.balance.starPower}`;
+ if(s.kind==='weapon')return `<b>${nameOf(s.payloadId)}</b> 기초 +${byId(c.weapons,s.payloadId).powerBonus}. 속성과 함께면 조합 무기`;
+ return `<b>${nameOf(s.payloadId)}</b> 같은 속성이면 Lv+1, 다르면 교체하고 Lv1부터`;
 }
 function hintText(){
- const b=state.battle,sel=b.hand.find(x=>x.instanceId===selected),selDef=sel?.stickerDefId?byId(c.stickers,sel.stickerDefId):null;
- if(sel?.characterDefId)return '빈 자리에 놓거나, 교체할 캐릭터를 누르세요. 스티커와 레벨은 옮겨져요';
- if(selDef?.kind==='element')return '같은 속성은 Lv+1, 다른 속성은 교체하고 Lv1부터';
- if(selDef?.kind==='star')return '별 Lv가 오를수록 기초 점수가 커져요';
- if(sel)return '숫자는 붙였을 때 점수 변화예요';
+ const b=state.battle,sel=b.hand.find(x=>x.instanceId===selected);
+ if(sel)return cardTip(sel);
  if(b.actionsUsed>=c.balance.attachLimit)return b.turn<c.balance.turnsPerBlind?'다 붙였어요. 턴을 넘기세요':'다 붙였어요. 전투하세요';
  if(!members(state.run.team).length)return '캐릭터 카드를 빈 자리에 놓으세요';
  return '스티커를 끌어서 캐릭터에 붙이세요';
 }
 function handDock(){
  const b=state.battle,left=c.balance.attachLimit-b.actionsUsed,last=b.turn>=c.balance.turnsPerBlind;
- return `<footer class="dock"><div class="hand-head"><span class="hint" id="hint">${hintText()}</span><span class="uses" aria-label="남은 붙이기 ${left}회">${Array.from({length:c.balance.attachLimit},(_,i)=>`<i class="${i<left?'on':''}"></i>`).join('')}</span></div>
+ return `<footer class="dock"><div class="hand-head"><span class="hint ${selected?'card-tip':''}" id="hint">${hintText()}</span><span class="uses" aria-label="남은 붙이기 ${left}회">${Array.from({length:c.balance.attachLimit},(_,i)=>`<i class="${i<left?'on':''}"></i>`).join('')}</span></div>
  <div class="hand">${b.hand.length?b.hand.map((card,i,arr)=>handCard(card,i,arr.length,left<=0)).join(''):'<p class="empty">손패가 없어요</p>'}</div>
  <div class="actions"><button type="button" class="deck-mini" data-action="deck" aria-label="덱 보기"><b>${b.drawPile.length}</b><small>${uiIcon('cards')} 남은 덱</small></button><button type="button" class="go ${last?'fight':''}" data-action="end">${last?'전투!':'턴 종료'}</button></div></footer>`;
 }
-// 점수 연출 단계: 기초(덧셈) → 배율(곱셈) → 목표 보너스.
+// 점수 연출 단계: 덧셈은 기초 한 번에 채우고, 배율이 들어가는 순간만 하나씩 보여준다(발라트로식).
 function stepItems(r){
- const items=[],core=r.base+r.weapons+r.stars;
- items.push(`<li class="add" data-add="${core}">캐릭터·무기·별<b>+${core}</b></li>`);
- if(r.combos)items.push(`<li class="add" data-add="${r.combos}" data-src="tray">족보<b>+${number(r.combos)}</b></li>`);
- for(const e of r.effects.filter(x=>x.operation==='add'))items.push(e.active?`<li class="add" data-add="${e.amount}">${e.name}<b>+${number(e.amount)}</b></li>`:`<li class="off">${e.name}</li>`);
- if(r.accumulated)items.push(`<li class="add" data-add="${r.accumulated}">누적<b>+${number(r.accumulated)}</b></li>`);
- if(r.comboMultiplier!==1)items.push(`<li class="mul" data-mul="${r.comboMultiplier}" data-src="tray">족보 레벨<b>×${number(r.comboMultiplier)}</b></li>`);
- for(const e of r.effects.filter(x=>x.operation==='multiply'))items.push(e.active&&e.amount!==1?`<li class="mul" data-mul="${e.amount}">${e.name}<b>×${number(e.amount)}</b></li>`:`<li class="off">${e.name}</li>`);
+ const items=[`<li class="add" data-add="${r.chips}">기초<b>+${number(r.chips)}</b></li>`];
+ if(r.comboMultiplier!==1)items.push(`<li class="mul" data-mul="${r.comboMultiplier}" data-src="tray">페어·트리플 Lv<b>×${number(r.comboMultiplier)}</b></li>`);
+ for(const e of r.effects.filter(x=>x.operation==='multiply'&&x.active&&x.amount!==1))items.push(`<li class="mul" data-mul="${e.amount}" data-unit="${e.sourceInstanceId}">${e.name}<b>×${number(e.amount)}</b></li>`);
  if(r.affinity.total!==1)items.push(`<li class="mul aff-step" data-mul="${r.affinity.total}">상성<b>×${number(r.affinity.total)}</b></li>`);
  if(r.targetBonus)items.push(`<li class="bonus" data-bonus="${r.targetBonus}">목표 보너스<b>+${r.targetBonus}</b></li>`);
  return items.join('');
@@ -218,7 +225,7 @@ function renderTitle(){
 function rewardFace(o,applied=false){
  const recipe=o.type==='recipe'?byId(c.weaponRecipes,o.key):null,cur=levelOf(state.run.levels,o.key)-(applied?o.levels:0);
  const art=recipe?ic(recipe.assetId,'rart'):`<span class="rkind">${levelKindLabels[o.key]}</span>`;
- const title=recipe?recipe.name:`${levelKindLabels[o.key]} 족보`;
+ const title=recipe?recipe.name:`${levelKindLabels[o.key]} 보너스`;
  return `<span class="rgrade">${gradeLabels[o.grade]}</span>${art}<b class="rtitle">${title}</b><span class="rlv">Lv${cur} → <em>Lv${cur+o.levels}</em></span><span class="rplus">+${o.levels}</span>`;
 }
 function rewardCards(){
@@ -235,7 +242,7 @@ function renderReward(){
  const lead=ph==='reward_reveal'?'세 장 중 하나를 받아요. 섞은 뒤 원하는 카드를 쫓아가세요!':ph==='reward_pick'?'카드를 골라 뒤집으세요.':'';
  let dock='';
  if(ph==='reward_reveal')dock='<footer class="dock"><button type="button" class="go" data-action="shuffle">섞기</button></footer>';
- else if(ph==='reward_done'){const o=rw.offers[rw.order[rw.picked]];dock=`<footer class="dock"><p class="got">${o.type==='recipe'?byId(c.weaponRecipes,o.key).name:levelKindLabels[o.key]+' 족보'} Lv${levelOf(state.run.levels,o.key)}!</p><div class="next-foe"><small>다음 블라인드</small>${elementChip(nextEl)}<b>목표 ${nextBlind.target}</b></div><button type="button" class="go" data-action="next-blind">다음 블라인드</button></footer>`;}
+ else if(ph==='reward_done'){const o=rw.offers[rw.order[rw.picked]];dock=`<footer class="dock"><p class="got">${o.type==='recipe'?byId(c.weaponRecipes,o.key).name:levelKindLabels[o.key]+' 보너스'} Lv${levelOf(state.run.levels,o.key)}!</p><div class="next-foe"><small>다음 블라인드</small>${elementChip(nextEl)}<b>목표 ${nextBlind.target}</b></div><button type="button" class="go" data-action="next-blind">다음 블라인드</button></footer>`;}
  return stageTop(`<b>블라인드 ${b.blindIndex+1} 통과</b>`)+`<main class="reward"><h2>보상 뽑기</h2><p class="lead" id="reward-lead">${lead}</p>${rewardCards()}</main>${dock}`;
 }
 
@@ -247,10 +254,87 @@ function renderRunResult(){
  <div class="party">${members(state.run.team).map(u=>`<div class="punit static">${unitBadges(u,state.battle,true)}<canvas data-render="${u.instanceId}"></canvas><span class="uname">${nameOf(u.characterDefId)}</span></div>`).join('')}</div></main><footer class="dock"><button type="button" class="go" data-action="restart">다시 원정</button></footer>`;
 }
 
+/* ── 말풍선: 누르거나(모바일) 올려두면(PC) 그 자리 옆에 현재 적용 상태를 보여준다 ── */
+let pop=null;
+function closePop(){pop?.el.remove();pop=null;}
+// hover: PC에서 올려둬서 연 말풍선. 누르면 고정되고, 포인터가 떠나면 고정 안 된 것만 닫힌다.
+function openPop(key,anchor,html,hover=false){
+ closePop();if(!anchor)return;
+ const el=document.createElement('div');el.className='pop';el.setAttribute('role','tooltip');el.innerHTML=html;app.append(el);
+ const a=anchor.getBoundingClientRect(),box=app.getBoundingClientRect(),w=Math.min(290,box.width-20);
+ el.style.width=w+'px';const left=Math.max(10,Math.min(box.width-w-10,a.left+a.width/2-w/2-box.left));el.style.left=left+'px';
+ let top=a.top-box.top-el.offsetHeight-10;const below=top<8;if(below)top=a.bottom-box.top+10;
+ el.style.top=top+'px';el.classList.toggle('below',below);el.style.setProperty('--arrow',Math.max(14,Math.min(w-14,a.left+a.width/2-box.left-left))+'px');
+ pop={key,el,hover,anchor};
+}
+const effValue=e=>e.operation==='multiply'?`×${number(e.amount)}`:e.operation==='targetPercent'?`최종 +목표의 ${number(e.amount)}%`:e.operation==='accumulate'?`턴 종료 시 +${number(e.amount)}`:`+${number(e.amount)}`;
+function unitPop(slot){
+ const u=state.run.team.characters[slot],r=reading(),b=state.battle,rec=recipeFor(u,c),lv=rec?levelOf(state.run.levels,rec.id):0;
+ const eff=rec&&r.effects.find(x=>x.sourceInstanceId===u.instanceId),rel=relationOf(u.elementId,b.elementId,c),aff=r.affinity.units.find(x=>x.instanceId===u.instanceId);
+ const nextRel=b.nextElementId?relationOf(u.elementId,b.nextElementId,c):'neutral';
+ return `<b class="pop-title">${nameOf(u.characterDefId)}</b>
+ ${u.starLevel?`<div class="pop-row">★ 별 Lv${u.starLevel}<em>+${u.starLevel*c.balance.starPower}</em></div>`:''}
+ ${u.weaponId?`<div class="pop-row">${nameOf(u.weaponId)}<em>+${byId(c.weapons,u.weaponId).powerBonus}</em></div>`:''}
+ ${u.elementId?`<div class="pop-row">${nameOf(u.elementId)} Lv${u.elementLevel}${rel!=='neutral'?`<em class="${rel==='advantage'?'good':'bad'}">${rel==='advantage'?'▲ 유리':'▼ 불리'} ×${number(aff.multiplier)}</em>`:'<em>상성 무관</em>'}</div>`:''}
+ ${rec?`<div class="pop-recipe ${eff?.active?'on':'off'}"><b>${rec.name} Lv${lv}</b><em>${eff?.active?effValue(eff):'조건 미충족'}</em><small>${effectDescription(rec,lv)}</small></div>`:''}
+ ${nextRel==='disadvantage'?'<div class="pop-row warn">! 다음 블라인드에서 불리</div>':''}
+ ${!u.weaponId&&!u.elementId&&!u.starLevel?'<div class="pop-row dim">스티커를 붙여 키워 보세요</div>':''}
+ <button type="button" class="pop-more" data-action="inspect-more" data-slot="${slot}">자세히</button>`;
+}
+function combosPop(){
+ const r=reading(),ups=c.comboLevelKinds.filter(k=>levelOf(state.run.levels,k)>1);
+ return `<b class="pop-title">페어 · 트리플 보너스 <em>+${number(r.combos)}</em></b>
+ ${r.matches.length?r.matches.map(m=>`<div class="pop-row">${comboName(m)}<em>+${number(m.bonus)}</em></div>`).join(''):'<div class="pop-row dim">같은 종족·직업·무기·속성이 2명이면 페어, 3명이면 트리플, 모두 다르면 컬렉션이에요.</div>'}
+ ${ups.map(k=>`<div class="pop-row lv">${levelKindLabels[k]} Lv${levelOf(state.run.levels,k)}<em>성립마다 ×${number(1+c.balance.comboMultPerLevel*(levelOf(state.run.levels,k)-1))}</em></div>`).join('')}
+ <button type="button" class="pop-more" data-action="combos-sheet">자세히</button>`;
+}
+function elementPop(){
+ const b=state.battle,beats=c.affinity.beats,win=Object.keys(beats).find(k=>beats[k]===b.elementId),lose=beats[b.elementId];
+ return `<b class="pop-title">${nameOf(b.elementId)} 블라인드</b>
+ <div class="pop-row">${nameOf(win)} 속성<em class="good">▲ 유리</em></div><div class="pop-row">${nameOf(lose)} 속성<em class="bad">▼ 불리</em></div>
+ <div class="pop-row dim">속성 Lv이 높을수록 차이가 커져요.</div>
+ <button type="button" class="pop-more" data-action="affinity-sheet">자세히</button>`;
+}
+function togglePop(key,anchor,html){if(pop?.key===key){if(pop.hover)pop.hover=false;else closePop();return;}openPop(key,anchor,html());}
+
+/* ── 신규 유저 안내 ── */
+// 상황이 처음 생길 때 한 번만 뜨는 팁. 본 팁은 브라우저에 기억한다(저장이 막혀 있어도 동작은 한다).
+const TIP_KEY='stickerBattle.tips.v1';
+const seenTips=(()=>{try{return new Set(JSON.parse(localStorage.getItem(TIP_KEY)??'[]'));}catch{return new Set();}})();
+function saveTips(){try{localStorage.setItem(TIP_KEY,JSON.stringify([...seenTips]));}catch{}}
+const attaching=()=>state.phase==='attach';
+const tips=[
+ {id:'goal',when:()=>attaching()&&state.battle.blindIndex===0&&state.battle.turn===1,text:`카드를 끌어 원정대에 붙여요. ${c.balance.turnsPerBlind}턴이 끝났을 때 점수가 목표를 넘으면 통과!`},
+ {id:'combo',when:()=>attaching()&&reading().matches.length>0,text:'같은 종족·직업·무기·속성이 2명이면 페어, 3명이면 트리플! 아래 칸에 불이 켜지고 점수가 붙어요. 칸을 누르면 자세히 볼 수 있어요.'},
+ {id:'element',when:()=>attaching()&&members(state.run.team).some(u=>u.elementId),text:'속성이 블라인드 속성을 이기면 ▲ 배율이 오르고, 지면 ▼ 내려가요. 같은 속성을 또 붙이면 Lv이 올라요.'},
+ {id:'recipe',when:()=>attaching()&&members(state.run.team).some(u=>recipeFor(u,c)),text:'무기 + 속성 = 조합 무기! 불은 배율, 물은 기초 점수, 번개는 턴마다 쌓여요. ✗ 표시면 조건 미충족이에요. 캐릭터를 누르면 효과를 볼 수 있어요.'},
+ {id:'next',when:()=>attaching()&&!!state.battle.nextElementId&&members(state.run.team).some(u=>relationOf(u.elementId,state.battle.nextElementId,c)==='disadvantage'),text:'! 표시는 다음 블라인드 속성에 불리한 캐릭터예요. 원정대는 다음 블라인드로 그대로 가니 미리 대비하세요.'},
+ {id:'fight',when:()=>attaching()&&state.battle.turn===c.balance.turnsPerBlind,text:'마지막 턴! 전투를 누르면 점수가 목표를 넘는지 판정해요.'},
+ {id:'reward',when:()=>state.phase==='reward_reveal',text:'원하는 카드를 봐 두세요. 섞는 동안 눈으로 쫓아가면 그 카드를 가질 수 있어요!'},
+];
+let activeTip=null;
+// 띄운 팁은 닫거나 상황이 지나갈 때까지 유지하고, 한 번 띄운 팁은 다시 띄우지 않는다.
+function pickTip(){
+ if(activeTip&&!activeTip.when()){seenTips.add(activeTip.id);saveTips();activeTip=null;}
+ if(!activeTip&&!selected)activeTip=tips.find(t=>!seenTips.has(t.id)&&t.when())??null;
+ return activeTip;
+}
+function dismissTip(){if(activeTip){seenTips.add(activeTip.id);saveTips();activeTip=null;}render();}
+// 첫 블라인드 1~2턴: 점수가 가장 오르는 카드와 자리를 반짝여, 따라만 해도 첫 족보를 경험하게 한다.
+function suggestion(){
+ const b=state.battle;if(!attaching()||b.blindIndex!==0||b.turn>2||selected||b.actionsUsed>=c.balance.attachLimit)return null;
+ const base=reading().score;let best=null;
+ for(const card of b.hand)for(let slot=0;slot<c.balance.teamSize;slot++){const pv=previewFor(slot,card.instanceId);if(pv.reason)continue;const d=pv.reading.score-base;if(!best||d>best.d)best={card:card.instanceId,slot,d};}
+ return best&&best.d>0?best:null;
+}
+
 /* ── 렌더 ── */
 function render(){
  const f=fx,p=state.phase;
+ pop=null;movedSinceRender=false;clearTimeout(hoverTimer);
  app.innerHTML=p==='title'?renderTitle():p.startsWith('reward_')?renderReward():p==='run_result'?renderRunResult():renderBattle();
+ const tip=pickTip();if(tip)app.insertAdjacentHTML('beforeend',`<div class="tip" role="note"><p>${tip.text}</p><button type="button" data-action="tip-ok">알겠어요</button></div>`);
+ const sg=p==='attach'?suggestion():null;if(sg){app.querySelector(`.hand [data-card="${sg.card}"]`)?.classList.add('suggest');app.querySelector(`.punit[data-slot="${sg.slot}"]`)?.classList.add('suggest');}
  for(const canvas of app.querySelectorAll('[data-render]')){
   const id=canvas.dataset.render,slot=state.run.team.characters.findIndex(u=>u?.instanceId===id),unit=state.run.team.characters[slot];
   if(unit){if(f?.attached===slot)canvas.dataset.evolve='yes';renderCharacter(canvas,unit,c);}
@@ -295,7 +379,10 @@ function afterRender(f){
  if(!f)return;
  if(f.attached!==undefined){
   const el=app.querySelector(`.punit[data-slot="${f.attached}"]`);if(f.delta)floatText(el,(f.delta>0?'+':'')+f.delta,f.delta>0?'up':'down');
-  f.changes.forEach((ch,i)=>setTimeout(()=>burst(ch.text,!ch.gain),i*420));
+  // 제자리 반응: 합류·레벨·교체는 캐릭터 위, 페어·트리플 보너스 변화는 합계 위. 가운데는 큰 사건 한 단어만.
+  const note=f.changes.find(ch=>!ch.axis);if(note)setTimeout(()=>floatText(el,note.text,(note.gain?'up':'down')+' note'),260);
+  if(f.comboDelta)floatText(document.getElementById('tray-total'),(f.comboDelta>0?'+':'')+number(f.comboDelta),f.comboDelta>0?'up':'down');
+  const big=f.recipe?`${f.recipe}!`:f.newBig?`${comboLabels[f.newBig]}!`:null;if(big)burst(big);
   flyCard(f.cardSnapshot,el);particles(el);
  }
  if(f.accumulated){const acc=document.getElementById('acc');if(acc){bump(acc,true);floatText(acc,'+'+number(f.accumulated.gain),'up');}}
@@ -325,9 +412,9 @@ async function playResolve(){
  for(const li of steps){
   if(token.skip)break;
   li.classList.remove('pending');li.classList.add('hit');
-  const origin=app.querySelector(li.classList.contains('aff-step')?'.party':li.dataset.src==='tray'?'.tray':'.party');if(origin&&!reduced){origin.classList.add('fx-source');setTimeout(()=>origin.classList.remove('fx-source'),420);}
+  const origin=li.dataset.unit?app.querySelector(`canvas[data-render="${li.dataset.unit}"]`)?.closest('.punit'):app.querySelector(li.dataset.src==='tray'?'.tray':'.party');if(origin&&!reduced){origin.classList.add('fx-source');setTimeout(()=>origin.classList.remove('fx-source'),420);}
   const add=Number(li.dataset.add||0),mul=Number(li.dataset.mul||1),bn=Number(li.dataset.bonus||0);
-  if(add){await count(chipsEl,chips,chips+add,300);chips+=add;bump(chipsEl.parentElement);}
+  if(add){await count(chipsEl,chips,chips+add,520);chips+=add;bump(chipsEl.parentElement);}
   if(mul!==1){mult*=mul;multEl.textContent=number(mult);bump(multEl.parentElement,true);if(!reduced&&mul>1){app.classList.remove('quake');void app.offsetWidth;app.classList.add('quake');}}
   if(bn)bonus+=bn;
   await wait(260);
@@ -384,18 +471,21 @@ function preview(target){
  const pv=previewFor(Number(target.dataset.slot),selected);
  if(pv.reason){setDuel(reading(),false);line.innerHTML=`<span class="loss">${messages[pv.reason]}</span>`;return;}
  target.classList.add('hover');setDuel(pv.reading,true);
- const bits=comboChanges(pv.before,pv.after).map(x=>`<span class="${x.gain?'gain':'loss'}">${x.text}</span>`);
- const rec=recipeFor(pv.unit,c),oldRec=pv.old?recipeFor(pv.old,c):null;
- if(rec&&oldRec?.id!==rec.id)bits.push(`<span class="gain">${rec.name} 완성</span>`);
- if(pv.def?.kind==='star')bits.unshift(`<span class="gain">★ Lv${pv.unit.starLevel}</span>`);
- if(pv.def?.kind==='element'){
-  if(pv.old.elementId===pv.def.payloadId)bits.unshift(`<span class="gain">${nameOf(pv.def.payloadId)} Lv${pv.unit.elementLevel}</span>`);
-  else if(pv.old.elementId)bits.unshift(`<span class="loss">${nameOf(pv.old.elementId)} Lv${pv.old.elementLevel} 사라짐</span>`);
-  const rel=relationOf(pv.unit.elementId,state.battle.elementId,c);if(rel!=='neutral')bits.push(`<span class="${rel==='advantage'?'gain':'loss'}">상성 ${rel==='advantage'?'유리':'불리'}</span>`);
- }
- if(pv.def?.kind==='weapon'&&pv.old.weaponId)bits.push(`<span class="loss">기존 ${nameOf(pv.old.weaponId)} 사라짐</span>`);
- if(pv.card.characterDefId&&pv.old)bits.unshift(`<span class="gain">${nameOf(pv.old.characterDefId)} → ${nameOf(pv.card.characterDefId)}, 스티커 유지</span>`);
- line.innerHTML=bits.join('');
+ // 가장 중요한 변화 한 가지만: 잃는 것 > 조합 무기 완성 > 새 페어·트리플 > 레벨 > 상성.
+ const rec=recipeFor(pv.unit,c),oldRec=pv.old?recipeFor(pv.old,c):null,rel=pv.def?.kind==='element'?relationOf(pv.unit.elementId,state.battle.elementId,c):'neutral';
+ const gained=newMatches(pv.before,pv.after).sort((a,b)=>b.priority-a.priority)[0],lost=lostMatches(pv.before,pv.after).sort((a,b)=>b.priority-a.priority)[0];
+ const relMark=rel==='advantage'?' ▲':rel==='disadvantage'?' ▼':'';
+ const word=pv.def?.kind==='element'&&pv.old.elementId&&pv.old.elementId!==pv.def.payloadId?['loss',`${nameOf(pv.old.elementId)} Lv${pv.old.elementLevel} 사라짐`]
+  :pv.def?.kind==='weapon'&&pv.old.weaponId?['loss',`${nameOf(pv.old.weaponId)} 교체`]
+  :lost?['loss',`${comboName(lost)} 해제`]
+  :pv.card.characterDefId&&pv.old?['gain',`${nameOf(pv.card.characterDefId)}로 교체, 스티커 유지`]
+  :rec&&oldRec?.id!==rec.id?['gain',`${rec.name} 완성`]
+  :gained?['gain',`${comboName(gained)} +${number(gained.bonus)}`]
+  :pv.def?.kind==='star'?['gain',`★ Lv${pv.unit.starLevel}`]
+  :pv.def?.kind==='element'&&pv.old.elementId===pv.def.payloadId?[rel==='disadvantage'?'loss':'gain',`${nameOf(pv.def.payloadId)} Lv${pv.unit.elementLevel}${relMark}`]
+  :rel!=='neutral'?[rel==='advantage'?'gain':'loss',`상성 ${rel==='advantage'?'유리 ▲':'불리 ▼'}`]
+  :pv.def?.kind==='element'?['gain',`${nameOf(pv.def.payloadId)} Lv${pv.unit.elementLevel}`]:null;
+ line.innerHTML=word?`<span class="${word[0]}">${word[1]}</span>`:'';
 }
 
 /* ── 바텀시트 ── */
@@ -406,6 +496,9 @@ function guaranteedText(){
  const g=c.characterRules.guaranteedTurns,t=ts=>ts.length>1?`${ts[0]}~${ts[ts.length-1]}턴`:`${ts[0]}턴`,rest=g.slice(1).map(t);
  return rest.every(x=>x===rest[0])?`블라인드 1은 ${t(g[0])}, 이후 블라인드는 ${rest[0]}에`:g.map((ts,i)=>`블라인드 ${i+1}은 ${t(ts)}`).join(', ')+'에';
 }
+document.getElementById('info-content').addEventListener('click',e=>{
+ if(e.target.closest('[data-help="tips"]')){seenTips.clear();saveTips();activeTip=null;document.getElementById('info').close();render();}
+});
 function showRules(){const t=c.balance;openInfo(`<h2>원정 규칙</h2><ol>
 <li>원정은 블라인드 ${c.blinds.length}개. 블라인드마다 ${t.turnsPerBlind}턴을 진행하고, 마지막 턴이 끝나면 점수가 목표 이상인지 판정해요. 못 넘기면 원정이 끝나요.</li>
 <li>매 턴 손패 ${t.handSize}장을 받고 최대 ${t.attachLimit}번 붙여요. 남은 카드는 턴 종료 때 버려져요.</li>
@@ -414,14 +507,14 @@ function showRules(){const t=c.balance;openInfo(`<h2>원정 규칙</h2><ol>
 <li><b>속성</b>: 같은 속성을 붙이면 Lv+1, 다른 속성을 붙이면 교체되고 Lv1부터 다시 시작해요.</li>
 <li><b>무기</b>: 기초 +${t.weaponPower}. 무기와 속성이 함께 있으면 조합 무기가 돼요.</li>
 <li><b>상성</b>: ${cycleText()}. 블라인드 속성을 이기면 ×(1+${t.affinityPerLevel}×속성Lv), 지면 그만큼 나눠요.</li>
-<li>점수는 <b>기초 × 배율</b>. 기초는 캐릭터·무기·별·족보·물 조합 효과·누적의 합, 배율은 족보 레벨·불 조합 효과·상성을 곱한 값이에요.</li>
-<li>원정대는 블라인드가 바뀌어도 그대로예요. 블라인드를 넘기면 보상 카드 3장을 섞어 1장을 뽑아요.</li></ol><p class="note">현재 수치는 재미와 균형 확인용 임시값입니다.</p>`);}
+<li>점수는 <b>기초 × 배율</b>. 기초는 캐릭터·무기·별·페어/트리플 보너스·물 조합 효과·누적의 합, 배율은 페어/트리플 레벨·불 조합 효과·상성을 곱한 값이에요.</li>
+<li>원정대는 블라인드가 바뀌어도 그대로예요. 블라인드를 넘기면 보상 카드 3장을 섞어 1장을 뽑아요.</li></ol><p class="note">현재 수치는 재미와 균형 확인용 임시값입니다.</p><button type="button" class="ghost help-tips" data-help="tips">처음 안내 다시 보기</button>`);}
 function showAffinity(){openInfo(`<h2>상성</h2><p>${cycleText()}. 캐릭터마다 블라인드 속성과 비교해요.</p><table class="table"><tr><td>유리 ▲</td><td>×(1 + ${c.balance.affinityPerLevel} × 속성 Lv)</td></tr><tr><td>불리 ▼</td><td>÷(1 + ${c.balance.affinityPerLevel} × 속성 Lv)</td></tr><tr><td>무관</td><td>×1</td></tr></table><p class="note">다음 블라인드 속성은 미리 알려줘요. 그때 불리해질 캐릭터에는 ! 표시가 붙어요.</p>`);}
 function showCombos(){
  const lv=k=>levelOf(state.run?.levels,k),row=(kind,desc,axisBonus,starBonus)=>`<tr><td>${comboLabels[kind]}</td><td>${desc}</td><td>+${axisBonus} · 별 +${starBonus}×Lv</td></tr>`;
  const bonus=(axis,kind)=>c.combos.find(r=>r.axis===axis&&r.kind===kind).flatPowerBonus;
- openInfo(`<h2>족보</h2><p>종족·직업·무기·속성·별 5개 항목을 3명 기준으로 비교해요. 항목마다 가장 높은 족보 하나만 적용돼요. 별은 레벨로 비교해요.</p><table class="table">${row('pair','같은 값 2명',bonus('race','pair'),bonus('star','pair'))}${row('collection','3명 모두 다름 (별은 연속 Lv = 스트레이트)',bonus('race','collection'),bonus('star','straight'))}${row('triple','3명 모두 같음',bonus('race','triple'),bonus('star','triple'))}</table>
- <h3 class="sheet-h">족보 레벨</h3><p>보상으로 페어·컬렉션·트리플 레벨을 올려요. Lv이 오르면 보너스가 ×Lv, 그 족보가 성립할 때마다 배율 ×(1+${c.balance.comboMultPerLevel}×(Lv−1)).</p><table class="table">${c.comboLevelKinds.map(k=>`<tr><td>${levelKindLabels[k]}</td><td>Lv${lv(k)}</td></tr>`).join('')}</table><p class="note">빈 칸과 별 Lv0은 족보에서 빠져요.</p>`);
+ openInfo(`<h2>페어 · 트리플 · 컬렉션</h2><p>종족·직업·무기·속성·별 5개 항목을 3명 기준으로 비교해요. 항목마다 가장 높은 것 하나만 적용되고, 성립한 칸은 불이 켜져요. 별은 레벨로 비교해요.</p><table class="table">${row('pair','같은 값 2명',bonus('race','pair'),bonus('star','pair'))}${row('collection','3명 모두 다름 (별은 연속 Lv = 스트레이트)',bonus('race','collection'),bonus('star','straight'))}${row('triple','3명 모두 같음',bonus('race','triple'),bonus('star','triple'))}</table>
+ <h3 class="sheet-h">레벨</h3><p>보상으로 페어·컬렉션·트리플 레벨을 올려요. Lv이 오르면 보너스가 ×Lv, 그 종류가 성립할 때마다 배율 ×(1+${c.balance.comboMultPerLevel}×(Lv−1)).</p><table class="table">${c.comboLevelKinds.map(k=>`<tr><td>${levelKindLabels[k]}</td><td>Lv${lv(k)}</td></tr>`).join('')}</table><p class="note">빈 칸과 별 Lv0은 판정에서 빠져요.</p>`);
 }
 function showRecipes(){openInfo(`<h2>조합 무기</h2><p>무기와 속성을 같은 캐릭터에 붙이면 조합 무기가 돼요. 불은 배율, 물은 기초 점수, 번개는 턴마다 누적. 레벨은 보상으로 올려요.</p><div class="recipe-list">${c.weaponRecipes.map(r=>{const lv=levelOf(state.run?.levels,r.id);return `<article>${ic(r.assetId,'recipe-art')}<b>${r.name} <small>Lv${lv}</small></b><small>${nameOf(r.weaponId)} + ${nameOf(r.elementId)}</small><p>${effectDescription(r,lv)}</p></article>`;}).join('')}</div>`);}
 function inspect(slot){
@@ -432,8 +525,8 @@ function inspect(slot){
 function showBreakdown(){
  const r=reading(),b=state.battle;
  openInfo(`<h2>점수 계산</h2><p class="sub">${state.phase==='attach'?'지금 전투하면 이렇게 계산돼요.':'이번 블라인드의 확정 점수예요.'}</p><table class="table">
- <tr><td>캐릭터·무기·별</td><td>${r.base+r.weapons+r.stars}</td></tr><tr><td>족보</td><td>+${number(r.combos)}</td></tr><tr><td>물 조합 효과</td><td>+${number(r.flat)}</td></tr><tr><td>누적</td><td>+${number(r.accumulated)}</td></tr><tr><td><b>기초</b></td><td><b>${number(r.chips)}</b></td></tr>
- <tr><td>족보 레벨 배율</td><td>×${number(r.comboMultiplier)}</td></tr><tr><td>불 조합 효과 배율</td><td>×${number(r.effectMultiplier)}</td></tr><tr><td>상성 배율</td><td>×${number(r.affinity.total)}</td></tr><tr><td><b>배율</b></td><td><b>×${number(r.multiplier)}</b></td></tr>
+ <tr><td>캐릭터·무기·별</td><td>${r.base+r.weapons+r.stars}</td></tr><tr><td>페어·트리플 보너스</td><td>+${number(r.combos)}</td></tr><tr><td>물 조합 효과</td><td>+${number(r.flat)}</td></tr><tr><td>누적</td><td>+${number(r.accumulated)}</td></tr><tr><td><b>기초</b></td><td><b>${number(r.chips)}</b></td></tr>
+ <tr><td>페어·트리플 레벨 배율</td><td>×${number(r.comboMultiplier)}</td></tr><tr><td>불 조합 효과 배율</td><td>×${number(r.effectMultiplier)}</td></tr><tr><td>상성 배율</td><td>×${number(r.affinity.total)}</td></tr><tr><td><b>배율</b></td><td><b>×${number(r.multiplier)}</b></td></tr>
  <tr><td>목표 보너스</td><td>+${r.targetBonus}</td></tr><tr><td><b>점수</b> / 목표</td><td><b>${r.score}</b> / ${b.target}</td></tr></table>
  ${r.effects.length?`<p class="note">${r.effects.map(e=>`${e.name} Lv${e.level}: ${e.active?(e.operation==='multiply'?'×':e.operation==='accumulate'?'턴 종료 시 +':'+')+number(e.amount)+(e.operation==='targetPercent'?'%':''):'조건 미충족'}`).join('<br>')}</p>`:''}`);
 }
@@ -445,16 +538,22 @@ function attach(slot){const card=state.battle.hand.find(x=>x.instanceId===select
 app.addEventListener('click',e=>{
  if(suppressClick){e.preventDefault();return;}
  if(resolveRun){resolveRun.flush();e.preventDefault();return;}
- const el=e.target.closest('[data-action]');if(!el||el.disabled)return;
+ const el=e.target.closest('[data-action]');
+ if(pop&&!e.target.closest('.pop')&&!['attach','combos','affinity'].includes(el?.dataset.action))closePop();
+ if(!el||el.disabled)return;
  switch(el.dataset.action){
+ case 'tip-ok':dismissTip();break;
+ case 'inspect-more':closePop();inspect(Number(el.dataset.slot));break;
+ case 'combos-sheet':closePop();showCombos();break;
+ case 'affinity-sheet':closePop();showAffinity();break;
  case 'rules':showRules();break;
  case 'recipes':showRecipes();break;
- case 'combos':showCombos();break;
- case 'affinity':showAffinity();break;
+ case 'combos':if(state.phase==='attach'||state.phase==='resolve')togglePop('combos',el,combosPop);else showCombos();break;
+ case 'affinity':if(state.battle)togglePop('element',el,elementPop);else showAffinity();break;
  case 'breakdown':if(!selected)showBreakdown();break;
  case 'start':command('StartRun',{seed:crypto.getRandomValues(new Uint32Array(1))[0]});break;
  case 'select':if(state.battle.actionsUsed>=c.balance.attachLimit){toast(messages.limit);return;}selected=selected===el.dataset.card?null:el.dataset.card;render();break;
- case 'attach':{if(state.phase!=='attach')break;const slot=Number(el.dataset.slot),u=state.run.team.characters[slot];if(selected)attach(slot);else if(u)inspect(slot);else toast('캐릭터 카드를 놓을 자리예요.');break;}
+ case 'attach':{if(state.phase!=='attach')break;const slot=Number(el.dataset.slot),u=state.run.team.characters[slot];if(selected){closePop();attach(slot);}else if(u)togglePop('unit'+slot,el,()=>unitPop(slot));else toast('캐릭터 카드를 놓을 자리예요.');break;}
  case 'end':command('EndTurn');break;
  case 'finish':command('FinishResolution');break;
  case 'shuffle':command('ShuffleRewards');break;
@@ -474,9 +573,27 @@ document.addEventListener('pointermove',e=>{
 function cancelDrag(){if(pointer&&app.hasPointerCapture(pointer.id))app.releasePointerCapture(pointer.id);pointer=null;ghost?.remove();ghost=null;app.querySelectorAll('.punit.hover').forEach(x=>x.classList.remove('hover'));}
 document.addEventListener('pointerup',e=>{if(!pointer||pointer.id!==e.pointerId)return;const was=pointer.dragging;cancelDrag();if(was){suppressClick=true;setTimeout(()=>suppressClick=false,0);const target=document.elementFromPoint(e.clientX,e.clientY)?.closest('[data-action="attach"]');if(target)attach(Number(target.dataset.slot));else{selected=null;render();}}});
 document.addEventListener('pointercancel',()=>{if(!pointer)return;cancelDrag();selected=null;render();});
+// PC 올려두기 말풍선: 화면이 다시 그려진 뒤 마우스가 실제로 움직였고, 잠깐 머물렀을 때만 연다.
+// (붙이고 나서 마우스가 가만히 있는데 말풍선이 뜨면 점수판을 가린다.)
+let hoverTimer=null,movedSinceRender=false;
+document.addEventListener('pointermove',e=>{if(e.pointerType==='mouse')movedSinceRender=true;},{passive:true});
+app.addEventListener('pointerover',e=>{
+ if(e.pointerType!=='mouse'||selected||state.phase!=='attach'||!movedSinceRender||(pop&&!pop.hover))return;
+ const t=e.target.closest('.punit[data-slot],.tray');if(!t||t.contains(e.relatedTarget))return;
+ clearTimeout(hoverTimer);
+ hoverTimer=setTimeout(()=>{if(!t.isConnected||selected||(pop&&!pop.hover))return;const slot=t.dataset.slot,u=slot!==undefined&&state.run.team.characters[Number(slot)];if(t.classList.contains('tray'))openPop('combos',t,combosPop(),true);else if(u)openPop('unit'+slot,t,unitPop(Number(slot)),true);},350);
+});
+app.addEventListener('pointerout',e=>{
+ if(e.pointerType!=='mouse')return;
+ const t=e.target.closest('.punit[data-slot],.tray,.pop');if(!t||t.contains(e.relatedTarget))return;
+ clearTimeout(hoverTimer);
+ // 앵커와 말풍선 사이를 오가는 건 유지, 둘 다 벗어나면 닫는다(올려두기로 연 것만).
+ const to=e.relatedTarget;if(pop?.hover&&!to?.closest?.('.pop')&&!(pop.anchor&&pop.anchor.contains(to)))closePop();
+});
 app.addEventListener('pointerover',e=>{if(selected&&!pointer?.dragging&&state.phase==='attach')preview(e.target.closest('[data-action="attach"]'));});
 app.addEventListener('focusin',e=>{if(selected&&state.phase==='attach')preview(e.target.closest('[data-action="attach"]'));});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&selected){cancelDrag();selected=null;render();}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&pop){closePop();return;}if(e.key==='Escape'&&selected){cancelDrag();selected=null;render();}});
+app.addEventListener('scroll',()=>closePop(),true);
 document.addEventListener('visibilitychange',()=>{document.body.classList.toggle('paused',document.hidden);if(document.hidden)cancelDrag();});
 render();
 

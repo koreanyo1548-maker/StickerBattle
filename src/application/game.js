@@ -28,7 +28,7 @@ function validatePlacement(state,command,c){
  return null;
 }
 // 교체해도 스티커와 레벨은 새 캐릭터로 옮겨진다.
-function placeUnit(old,slot,defId){const unit=makeUnit(`unit_${slot}`,defId);return old?{...unit,weaponId:old.weaponId,elementId:old.elementId,elementLevel:old.elementLevel,starLevel:old.starLevel}:unit;}
+function placeUnit(old,slot,defId){const unit=makeUnit(`unit_${slot}`,defId);return old?{...unit,weaponId:old.weaponId,weaponPlus:old.weaponPlus??0,elementId:old.elementId,elementLevel:old.elementLevel,starLevel:old.starLevel}:unit;}
 function beginTurn(s,c){
  const b=s.battle;b.turn++;b.actionsUsed=0;
  let charTurn=c.characterRules.guaranteedTurns[b.blindIndex].includes(b.turn);
@@ -86,7 +86,8 @@ function applyCommand(state,cmd,c){
   if(def.kind==='star')s.events.push({type:'StarLeveled',targetInstanceId:old.instanceId,level:now.starLevel});
   else if(def.kind==='element'&&old.elementId===def.payloadId)s.events.push({type:'ElementLeveled',targetInstanceId:old.instanceId,level:now.elementLevel});
   else if(def.kind==='element'&&old.elementId)s.events.push({type:'ElementReplaced',targetInstanceId:old.instanceId,from:old.elementId,lostLevel:old.elementLevel});
-  else if(def.kind==='weapon'&&old.weaponId)s.events.push({type:'EquipmentReplaced',targetInstanceId:old.instanceId});
+  else if(def.kind==='weapon'&&old.weaponId===def.payloadId)s.events.push({type:'WeaponEnhanced',targetInstanceId:old.instanceId,plus:now.weaponPlus});
+  else if(def.kind==='weapon'&&old.weaponId)s.events.push({type:'EquipmentReplaced',targetInstanceId:old.instanceId,from:old.weaponId,lostPlus:old.weaponPlus??0});
   const after=evaluateCombos(team,c,s.run.levels);if(JSON.stringify(before)!==JSON.stringify(after))s.events.push({type:'ComboChanged',matches:after});break;
  }
  case 'PlaceCharacter':{

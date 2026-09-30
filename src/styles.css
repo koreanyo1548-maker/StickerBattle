@@ -338,3 +338,5 @@ main.battle{justify-content:space-between}
 .hand-head{height:40px;align-items:center}
 .hint{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-height:40px}
 .hint.card-tip{padding:3px 10px;line-height:1.35;font-size:12.5px}
+.lv-wpn{display:flex;align-items:center;gap:1px;font-family:var(--disp);font-size:12px;line-height:1;background:#f5c64b;color:#41344e;border-radius:8px;padding:2px 6px 2px 2px;box-shadow:0 2px #7a5410}
+.lv-wpn .ic{width:15px;height:15px}

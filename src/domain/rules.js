@@ -1,8 +1,8 @@
 modules["src/domain/rules.mjs"]=(()=>{
 const {byId}=modules["src/content/data.mjs"];
 
-// 캐릭터 1명: 무기 1칸, 속성 1칸(레벨), 별 레벨. 레벨 상한은 없다.
-function makeUnit(id,defId){return {instanceId:id,characterDefId:defId,weaponId:null,elementId:null,elementLevel:0,starLevel:0};}
+// 캐릭터 1명: 무기 1칸(강화 수치), 속성 1칸(레벨), 별 레벨. 강화·레벨 상한은 없다.
+function makeUnit(id,defId){return {instanceId:id,characterDefId:defId,weaponId:null,weaponPlus:0,elementId:null,elementLevel:0,starLevel:0};}
 function attachmentReason(unit,sticker,c){
  if(!unit)return 'target';if(!sticker)return 'card';
  if(sticker.kind==='weapon'){
@@ -12,12 +12,12 @@ function attachmentReason(unit,sticker,c){
  }
  return null;
 }
-// 별은 Lv+1. 같은 속성은 Lv+1, 다른 속성은 교체하고 Lv1부터. 무기는 장착·교체.
+// 별은 Lv+1. 같은 속성은 Lv+1, 다른 속성은 교체하고 Lv1부터. 같은 무기는 강화 +1, 다른 무기는 교체하고 +0부터.
 function attachUnit(unit,sticker,c){
  const reason=attachmentReason(unit,sticker,c);if(reason)return {reason,unit};
  if(sticker.kind==='star')return {reason:null,unit:{...unit,starLevel:unit.starLevel+sticker.starAmount}};
  if(sticker.kind==='element')return {reason:null,unit:{...unit,elementId:sticker.payloadId,elementLevel:unit.elementId===sticker.payloadId?unit.elementLevel+1:1}};
- return {reason:null,unit:{...unit,weaponId:sticker.payloadId}};
+ return {reason:null,unit:{...unit,weaponId:sticker.payloadId,weaponPlus:unit.weaponId===sticker.payloadId?(unit.weaponPlus??0)+1:0}};
 }
 const members=team=>team.characters.filter(Boolean);
 // 런 레벨표: 레시피 ID와 족보 종류(pair·collection·triple)별 레벨. 없으면 Lv1.
@@ -54,6 +54,8 @@ function evaluateCombos(team,c,levels){
 }
 // 조합 무기 효과의 레벨별 세기. 효과 문구(화면)도 이 함수를 쓴다.
 const effectStrength=(effect,level)=>byLevel(effect.value,effect.perLevel,level);
+// 무기 기초 점수: 무기 기본값 + 강화 수치 × weaponPlusPower.
+function weaponPower(u,c){return u.weaponId?byId(c.weapons,u.weaponId).powerBonus+(u.weaponPlus??0)*c.balance.weaponPlusPower:0;}
 function recipeFor(unit,c){return c.weaponRecipes.find(r=>r.weaponId===unit.weaponId&&r.elementId===unit.elementId)??null;}
 function effectCount(effect,team,matches){
  switch(effect.condition){
@@ -102,7 +104,7 @@ function scoreTeam(team,blind,progress,c){
  const levels=progress?.levels??{},us=members(team);
  const matches=evaluateCombos(team,c,levels),effects=evaluateWeaponEffects(team,matches,c,levels),affinity=evaluateAffinity(team,blind.elementId,c);
  const base=us.reduce((n,u)=>n+byId(c.characters,u.characterDefId).basePower,0);
- const weapons=us.reduce((n,u)=>n+(u.weaponId?byId(c.weapons,u.weaponId).powerBonus:0),0);
+ const weapons=us.reduce((n,u)=>n+weaponPower(u,c),0);
  const stars=us.reduce((n,u)=>n+u.starLevel*c.balance.starPower,0);
  const combos=matches.reduce((n,m)=>n+m.bonus,0),accumulated=progress?.accumulated??0;
  const chips=base+weapons+stars+combos+effects.flat+accumulated;
@@ -129,4 +131,4 @@ function drawCards(b,count){
  }
 }
 
-return {makeUnit,attachmentReason,attachUnit,levelOf,evaluateCombos,recipeFor,effectStrength,evaluateWeaponEffects,relationOf,evaluateAffinity,scoreTeam,turnEndGain,nextRandom,shuffle,weightedPick,drawCards};})();
+return {makeUnit,attachmentReason,attachUnit,levelOf,evaluateCombos,weaponPower,recipeFor,effectStrength,evaluateWeaponEffects,relationOf,evaluateAffinity,scoreTeam,turnEndGain,nextRandom,shuffle,weightedPick,drawCards};})();

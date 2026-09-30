@@ -3,7 +3,7 @@ const {applyArt}=modules["src/content/art.mjs"];
 
 // 수치는 이 표에서만 수정한다. 데이터에는 화면 요소나 로직을 저장하지 않는다.
 // 레벨 효과는 모두 value + perLevel×(Lv−1) 형태다.
-const balance = Object.freeze({teamSize:3, blindCount:4, turnsPerBlind:6, handSize:5, attachLimit:3, basePower:5, weaponPower:5, starPower:3, affinityPerLevel:0.25, comboBonusPerLevel:1, comboMultPerLevel:0.25});
+const balance = Object.freeze({teamSize:3, blindCount:4, turnsPerBlind:6, handSize:5, attachLimit:3, basePower:5, weaponPower:5, weaponPlusPower:5, starPower:3, affinityPerLevel:0.25, comboBonusPerLevel:1, comboMultPerLevel:0.25});
 const labels = {
   race_human:'인간', race_elf:'엘프', race_orc:'오크', race_dwarf:'드워프', job_warrior:'전사', job_archer:'궁수', job_mage:'마법사',
   weapon_sword:'검', weapon_bow:'활', weapon_staff:'지팡이', element_fire:'불', element_water:'물', element_lightning:'번개', sticker_star:'별',
@@ -46,8 +46,9 @@ const weaponRecipes=[
  ['hone_sword','sword','lightning','연마검'],['chain_bow','bow','lightning','연쇄궁'],['charge_staff','staff','lightning','축적 지팡이']
 ].map(([key,w,e,name])=>({id:`recipe_${key}`,weaponId:`weapon_${w}`,elementId:`element_${e}`,effectId:`effect_${key}`,assetId:`asset_${key}`,name,acquisition:'combination'}));
 const initialDeck=stickers.flatMap(s=>Array(s.kind==='star'?6:2).fill(s.id));
-// 붙이기 규칙. 같은 무기 중첩(쌍검 등)은 나중에 'combine'으로 확장한다.
-const attachRules={sameWeapon:'reject',otherElement:'replaceAndReset'};
+// 붙이기 규칙. 같은 무기는 강화 +1(무기 기초 +weaponPlusPower), 다른 무기는 교체하고 강화 +0부터.
+// 강화 구간별 무기 그림 변화(쌍검 등)는 나중에 그림과 함께 추가한다.
+const attachRules={sameWeapon:'enhance',otherWeapon:'replaceAndReset',otherElement:'replaceAndReset'};
 const rig={id:'rig_v1',width:512,height:512,outline:8,anchors:{body:{x:0,y:0},weapon:{x:356,y:318},hand:{x:356,y:318},element:{x:386,y:158}},layerOrder:['body','weapon','hand','element']};
 // file에 투명 PNG 경로를 넣으면 해당 임시 파츠만 자동 교체된다.
 const assets={};
@@ -56,7 +57,7 @@ const visuals={};
 characters.forEach(c=>{visuals[c.visualProfileId]={id:c.visualProfileId,rigId:rig.id,bodyAssetId:asset(`${c.id}_body`),frontHandAssetId:asset(`${c.id}_hand`,{x:712,y:636}),anchors:rig.anchors,layerOrder:rig.layerOrder};});
 weapons.forEach(w=>asset(w.assetId,{x:712,y:636}));elements.forEach(e=>asset(e.assetId,{x:772,y:316}));asset('asset_star');[...races,...jobs].forEach(d=>asset(d.iconAssetId));asset('asset_background');
 // 블라인드: 목표 점수 하나. 속성은 런 시작 때 시드로 정한다. 몬스터 그림은 아직 없어 속성 아이콘으로 대신한다.
-const blinds=[100,400,1200,3500].map((target,i,a)=>({id:`blind_${i+1}`,target,boss:i===a.length-1}));
+const blinds=[130,550,1500,4500].map((target,i,a)=>({id:`blind_${i+1}`,target,boss:i===a.length-1}));
 // 일반 블라인드는 블라인드 속성의 몬스터, 보스 블라인드는 bossMonsterId. 보스 속성도 시드로 정한다.
 const monsters=[...elements.map(e=>({id:`monster_${e.id.slice(8)}`,elementId:e.id})),{id:'monster_boss',elementId:null}].map(m=>({...m,nameKey:m.id,assetId:asset(`asset_${m.id}`)}));
 const bossMonsterId='monster_boss';
@@ -96,7 +97,7 @@ function validateContent(c=content){
  }
  check(new Set(c.weaponRecipes.map(r=>r.weaponId+':'+r.elementId)).size===c.weaponRecipes.length,'조합 중복');
  for(const recipe of c.weaponRecipes)check(byId(c.weapons,recipe.weaponId)&&byId(c.elements,recipe.elementId)&&byId(c.weaponEffects,recipe.effectId)&&c.assets[recipe.assetId],'무기 조합 참조');
- check(['reject'].includes(c.attachRules.sameWeapon)&&['replaceAndReset'].includes(c.attachRules.otherElement),'붙이기 규칙');
+ check(['reject','enhance'].includes(c.attachRules.sameWeapon)&&['replaceAndReset'].includes(c.attachRules.otherWeapon)&&['replaceAndReset'].includes(c.attachRules.otherElement),'붙이기 규칙');
  c.initialDeck.forEach(id=>check(byId(c.stickers,id),'덱 참조'));
  check(c.initialDeck.length>=c.balance.handSize,'덱 크기');
  check(c.blinds.length===c.balance.blindCount&&c.blinds.every((b,i)=>Number.isInteger(b.target)&&b.target>0&&(i===0||b.target>c.blinds[i-1].target)),'블라인드 목표 점수');

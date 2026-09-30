@@ -11,6 +11,7 @@ const P = {
   starCombo: { pair: 3, straight: 6, triple: 9 },   // × 별 레벨. 스트레이트는 컬렉션 레벨을 따른다
   comboPerLv: 1,                        // 족보 레벨업: 보너스 ×(1 + perLv·(Lv-1))
   comboMultPerLv: 0.25,                 // 족보 레벨업 배율: 성립한 족보마다 ×(1 + m·(Lv-1))
+  rewardPick: 'blind',                  // 'blind': 뒤집힌 3장 중 하나를 뽑음(무작위), 'informed': 보고 고름(비교용)
   reward: 'mixed',                      // 'recipe': 조합 무기 Lv+1만, 'mixed': 조합 무기·족보 레벨업 중 3개 제시
   affinityPerLv: 0.25,                  // 유리 ×(1+k·Lv), 불리 ÷(1+k·Lv)
   recipeBase: 1.5, recipePerLv: 0.5,    // 조합 무기 ×(base + perLv·(Lv-1)), 조건은 생략
@@ -93,21 +94,22 @@ function runOnce(seed, policy) {
       }
     }
     scores.push(score(squad, blind, lv));
-    // 보상 택1. greedy는 다음 블라인드 기준으로 현재 원정대 점수가 가장 오르는 것을 고른다.
+    // 보상: 뒤집힌 카드 3장 중 1장. informed일 때만 greedy가 다음 블라인드 기준으로 가장 이득인 것을 고른다.
     const owned = [...new Set(squad.filter(u => u?.weapon && u.element).map(u => u.weapon + '_' + u.element))];
     const pool = P.reward === 'recipe' ? owned.slice(0, 1) : [...owned, ...KINDS];
     const offers = shuffle(r, pool).slice(0, 3);
     if (offers.length) {
       const next = { index: b + 1, element: elements[b + 1] ?? blind.element };
       const gain = k => score(squad, next, { ...lv, [k]: (lv[k] ?? 1) + 1 });
-      const k = policy === 'greedy' ? offers.reduce((a, x) => gain(x) > gain(a) ? x : a) : pick(r, offers);
+      const k = policy === 'greedy' && P.rewardPick === 'informed' ? offers.reduce((a, x) => gain(x) > gain(a) ? x : a) : pick(r, offers);
+      if (gain(k) <= score(squad, next, lv)) picks.dead++;   // 지금 원정대에 효과 없는 보상
       lv[k] = (lv[k] ?? 1) + 1; picks[k.includes('_') ? 'recipe' : k]++;
     }
   }
   return scores;
 }
 
-const picks = { recipe: 0, pair: 0, collection: 0, triple: 0 };
+const picks = { recipe: 0, pair: 0, collection: 0, triple: 0, dead: 0 };
 const N = Number(process.argv[2] ?? 2000), pct = (a, q) => a[Math.min(a.length - 1, Math.floor(q * a.length))];
 for (const policy of ['greedy', 'random']) {
   for (const k in picks) picks[k] = 0;

@@ -312,3 +312,33 @@ main.battle{justify-content:space-between}
 @media(max-width:400px){.top{padding-inline:10px}.stage{gap:5px;font-size:14px}.turn{font-size:12px}}
 .monster-slot::after{transition:opacity .4s}.blind-zone.defeated .monster-slot::after{opacity:0}
 .el-btn{display:inline-flex;padding:0;border-radius:999px}
+/* ── 글자 줄이기 (0.9): 놀이 영역엔 그림과 숫자, 설명은 고른 카드 말풍선 ── */
+.hand .sticker{min-height:84px;justify-content:center;padding:6px 2px}
+.hand .sicon{width:54px;height:54px}.hand .ccanvas{width:62px;height:62px;margin:0}
+.hint.card-tip{flex:1;background:var(--paper);color:var(--ink);border-radius:10px;padding:6px 10px;font-size:13px;line-height:1.4;box-shadow:0 3px 0 #0004}
+.hint.card-tip b{font-family:var(--disp);font-weight:400;margin-right:6px;color:#77538d}
+.hint:empty{display:none}
+.punit{padding-bottom:4px}
+.punit.vacant{min-height:120px}
+.punit.r-on canvas{filter:drop-shadow(0 0 7px #f5c64b)}
+.punit.r-on.k-mul canvas{filter:drop-shadow(0 0 7px #ef6a5b)}.punit.r-on.k-add canvas{filter:drop-shadow(0 0 7px #4c97d8)}.punit.r-on.k-acc canvas{filter:drop-shadow(0 0 7px #e8c040)}
+.r-lv{position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-family:var(--disp);font-size:12px;background:#41344e;color:#ffd76a;border-radius:7px;padding:1px 7px}
+.axis{justify-content:center;gap:1px}
+.axis.empty small{opacity:.5}
+.axis .glyph{font-size:13px;letter-spacing:1px;color:#cfe3ff}
+.axis.full .glyph{color:var(--gold)}
+.combo-levels{grid-column:1/-1;display:flex;justify-content:center;gap:6px}
+.combo-levels span{font-size:11px;background:#f5c64b26;color:var(--gold);border-radius:7px;padding:2px 8px}.combo-levels b{margin-left:4px;font-family:var(--disp);font-weight:400}
+.preview-line span{font-family:var(--disp);font-size:15px;padding:2px 10px}
+.tip{position:absolute;left:10px;right:10px;bottom:calc(100% + 8px);z-index:6;display:flex;gap:10px;align-items:center;background:var(--paper);color:var(--ink);border-radius:14px;padding:10px 10px 10px 14px;box-shadow:0 6px 18px #0008;animation:tipIn .3s}
+.tip::after{content:'';position:absolute;left:28px;bottom:-7px;width:14px;height:14px;background:var(--paper);transform:rotate(45deg)}
+.tip p{flex:1;font-size:13px;line-height:1.5}
+.tip button{flex:none;background:var(--gold);color:var(--ink);border-radius:9px;padding:6px 10px;font-size:13px;box-shadow:0 2px 0 var(--gold-d)}
+.suggest{animation:suggest 1.2s ease-in-out infinite}
+.punit.suggest{border-color:var(--gold)!important;background:#f5c64b24}
+.hand .sticker.suggest{box-shadow:0 0 0 3px #fff5e6,0 0 0 7px var(--gold),0 5px 0 3px #100c1c66}
+.help-tips{width:100%;margin-top:12px;color:var(--ink);background:#efe4cf;border-color:#d8c9ab}
+@keyframes suggest{50%{translate:0 -5px}}
+@keyframes tipIn{from{opacity:0;transform:translateY(8px)}}
+@media(max-height:760px){.hand .sticker{min-height:72px}.hand .sicon{width:44px;height:44px}.hand .ccanvas{width:50px;height:50px}}
+@media(prefers-reduced-motion:reduce){.suggest{animation:none!important}}

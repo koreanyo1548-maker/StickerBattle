@@ -312,6 +312,36 @@ main.battle{justify-content:space-between}
 @media(max-width:400px){.top{padding-inline:10px}.stage{gap:5px;font-size:14px}.turn{font-size:12px}}
 .monster-slot::after{transition:opacity .4s}.blind-zone.defeated .monster-slot::after{opacity:0}
 .el-btn{display:inline-flex;padding:0;border-radius:999px}
+/* ── 글자 줄이기 (0.9): 놀이 영역엔 그림과 숫자, 설명은 고른 카드 말풍선 ── */
+.hand .sticker{min-height:84px;justify-content:center;padding:6px 2px}
+.hand .sicon{width:54px;height:54px}.hand .ccanvas{width:62px;height:62px;margin:0}
+.hint.card-tip{flex:1;background:var(--paper);color:var(--ink);border-radius:10px;padding:6px 10px;font-size:13px;line-height:1.4;box-shadow:0 3px 0 #0004}
+.hint.card-tip b{font-family:var(--disp);font-weight:400;margin-right:6px;color:#77538d}
+.hint:empty{display:none}
+.punit{padding-bottom:4px}
+.punit.vacant{min-height:120px}
+.punit.r-on canvas{filter:drop-shadow(0 0 7px #f5c64b)}
+.punit.r-on.k-mul canvas{filter:drop-shadow(0 0 7px #ef6a5b)}.punit.r-on.k-add canvas{filter:drop-shadow(0 0 7px #4c97d8)}.punit.r-on.k-acc canvas{filter:drop-shadow(0 0 7px #e8c040)}
+.r-lv{position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-family:var(--disp);font-size:12px;background:#41344e;color:#ffd76a;border-radius:7px;padding:1px 7px}
+.axis{justify-content:center;gap:1px}
+.axis.empty small{opacity:.5}
+.axis .glyph{font-size:13px;letter-spacing:1px;color:#cfe3ff}
+.axis.full .glyph{color:var(--gold)}
+.combo-levels{grid-column:1/-1;display:flex;justify-content:center;gap:6px}
+.combo-levels span{font-size:11px;background:#f5c64b26;color:var(--gold);border-radius:7px;padding:2px 8px}.combo-levels b{margin-left:4px;font-family:var(--disp);font-weight:400}
+.preview-line span{font-family:var(--disp);font-size:15px;padding:2px 10px}
+.tip{position:absolute;left:10px;right:10px;bottom:calc(100% + 8px);z-index:6;display:flex;gap:10px;align-items:center;background:var(--paper);color:var(--ink);border-radius:14px;padding:10px 10px 10px 14px;box-shadow:0 6px 18px #0008;animation:tipIn .3s}
+.tip::after{content:'';position:absolute;left:28px;bottom:-7px;width:14px;height:14px;background:var(--paper);transform:rotate(45deg)}
+.tip p{flex:1;font-size:13px;line-height:1.5}
+.tip button{flex:none;background:var(--gold);color:var(--ink);border-radius:9px;padding:6px 10px;font-size:13px;box-shadow:0 2px 0 var(--gold-d)}
+.suggest{animation:suggest 1.2s ease-in-out infinite}
+.punit.suggest{border-color:var(--gold)!important;background:#f5c64b24}
+.hand .sticker.suggest{box-shadow:0 0 0 3px #fff5e6,0 0 0 7px var(--gold),0 5px 0 3px #100c1c66}
+.help-tips{width:100%;margin-top:12px;color:var(--ink);background:#efe4cf;border-color:#d8c9ab}
+@keyframes suggest{50%{translate:0 -5px}}
+@keyframes tipIn{from{opacity:0;transform:translateY(8px)}}
+@media(max-height:760px){.hand .sticker{min-height:72px}.hand .sicon{width:44px;height:44px}.hand .ccanvas{width:50px;height:50px}}
+@media(prefers-reduced-motion:reduce){.suggest{animation:none!important}}
 </style></head><body><div id="app"></div><div id="toast" role="status" aria-live="polite"></div><dialog id="info"><div id="info-content"></div><form method="dialog"><button class="go">닫기</button></form></dialog><script>(()=>{'use strict';const modules={};
 modules["src/content/art.mjs"]=(()=>{
 
@@ -861,6 +891,8 @@ const axisLabels={race:'종족',job:'직업',weapon:'무기',element:'속성',st
 const comboLabels={pair:'페어',collection:'컬렉션',straight:'스트레이트',triple:'트리플'};
 const levelKindLabels={pair:'페어',collection:'컬렉션',triple:'트리플'};
 const gradeLabels={low:'하',mid:'중',high:'상'};
+// 족보 종류 기호: 같은 것 2개 / 3개, 모두 다름, 연속.
+const kindGlyph={pair:'••',triple:'•••',collection:'△□○',straight:'1·2·3'};
 const relationMark={advantage:'▲',disadvantage:'▼',neutral:''};
 const number=v=>Number.isInteger(v)?String(v):String(Number(v.toFixed(2)));
 const ic=(assetId,cls='')=>`<i class="ic ic-${assetId} ${cls}" aria-hidden="true"></i>`;
@@ -917,7 +949,11 @@ function buildFx(type,prev,next,events){
   const slot=type==='PlaceCharacter'?events.find(e=>e.slot!==undefined).slot:prev.run.team.characters.findIndex(u=>u?.instanceId===events[0].targetInstanceId);
   f.attached=slot;
   f.delta=projectedScore(next.run,next.battle,c).score-projectedScore(prev.run,prev.battle,c).score;
-  f.changes=comboChanges(evaluateCombos(prev.run.team,c,prev.run.levels),evaluateCombos(next.run.team,c,next.run.levels));
+  const beforeM=evaluateCombos(prev.run.team,c,prev.run.levels),afterM=evaluateCombos(next.run.team,c,next.run.levels);
+  f.changes=comboChanges(beforeM,afterM);
+  f.newCombo=afterM.filter(m=>!beforeM.some(x=>x.ruleId===m.ruleId&&x.matchedValueId===m.matchedValueId)).sort((a,b)=>b.priority-a.priority)[0]?.kind??null;
+  const was=prev.run.team.characters[slot],now=next.run.team.characters[slot],rec=now&&recipeFor(now,c);
+  if(rec&&(!was||recipeFor(was,c)?.id!==rec.id))f.recipe=rec.name;
   for(const e of events){
    if(e.type==='CharacterPlaced')f.changes.unshift({text:`${nameOf(e.characterDefId)} 합류!`,gain:true});
    if(e.type==='CharacterReplaced')f.changes.unshift({text:`${nameOf(e.to)} 교체!`,gain:true});
@@ -947,12 +983,12 @@ function stickerCard(id,{instanceId='',i=0,n=1,spent=false}={}){
  const s=byId(c.stickers,id),e=s.kind==='element'?byId(c.elements,s.payloadId):null;
  const rot=n>1?(i-(n-1)/2)*4:0,tint=e?.color??(s.kind==='star'?'#d9a72c':'#7d6aa0');
  const desc=s.kind==='star'?'별 Lv+1':s.kind==='weapon'?`기초 +${byId(c.weapons,s.payloadId).powerBonus}`:'속성 Lv+1';
- return `<button type="button" class="sticker k-${s.kind} ${instanceId&&selected===instanceId?'sel':''} ${spent?'spent':''}" style="--rot:${rot}deg;--tint:${tint}" data-action="select" data-card="${instanceId}" aria-pressed="${selected===instanceId}">${ic(s.iconAssetId,'sicon')}<span class="sname">${nameOf(s.nameKey)}</span><span class="sdesc">${desc}</span></button>`;
+ return `<button type="button" class="sticker k-${s.kind} ${instanceId&&selected===instanceId?'sel':''} ${spent?'spent':''}" style="--rot:${rot}deg;--tint:${tint}" data-action="select" data-card="${instanceId}" aria-pressed="${selected===instanceId}" aria-label="${nameOf(s.nameKey)} ${desc}">${ic(s.iconAssetId,'sicon')}</button>`;
 }
 function handCard(card,i,n,spent){
  if(card.stickerDefId)return stickerCard(card.stickerDefId,{instanceId:card.instanceId,i,n,spent});
  const d=byId(c.characters,card.characterDefId),rot=n>1?(i-(n-1)/2)*4:0;
- return `<button type="button" class="sticker k-char ${selected===card.instanceId?'sel':''} ${spent?'spent':''}" style="--rot:${rot}deg;--tint:#7d6aa0" data-action="select" data-card="${card.instanceId}" aria-pressed="${selected===card.instanceId}"><canvas class="ccanvas" data-def-render="${d.id}"></canvas><span class="sname">${nameOf(d.id)}</span><span class="sdesc">배치·교체</span></button>`;
+ return `<button type="button" class="sticker k-char ${selected===card.instanceId?'sel':''} ${spent?'spent':''}" style="--rot:${rot}deg;--tint:#7d6aa0" data-action="select" data-card="${card.instanceId}" aria-pressed="${selected===card.instanceId}" aria-label="${nameOf(d.id)} 캐릭터 카드"><canvas class="ccanvas" data-def-render="${d.id}"></canvas></button>`;
 }
 
 /* ── 전투 화면 ── */
@@ -982,18 +1018,20 @@ function unitBadges(u,b,final=false){
  const warn=nextRel==='disadvantage'?'<span class="lv-warn" title="다음 블라인드에서 불리">!</span>':'';
  return `<span class="badges-l">${star}</span><span class="badges-r">${el}${warn}</span>`;
 }
-function recipeChip(u,r){
- const recipe=recipeFor(u,c);if(!recipe)return '';
+// 조합 무기는 캐릭터가 든 무기 그림으로 보이므로 이름은 쓰지 않는다. 발동 중이면 빛나고, Lv2부터 숫자만 붙인다.
+function recipeMark(u,r){
+ const recipe=recipeFor(u,c);if(!recipe)return {cls:'',html:''};
  const eff=r.effects.find(x=>x.sourceInstanceId===u.instanceId),lv=levelOf(state.run.levels,recipe.id);
- return `<span class="recipe ${eff?.active?'on':''} k-${effectKind(recipe)}">${recipe.name} Lv${lv}<i>${eff?.active?'✓':'✗'}</i></span>`;
+ return {cls:eff?.active?`r-on k-${effectKind(recipe)}`:'r-off',html:lv>1?`<span class="r-lv">Lv${lv}</span>`:''};
 }
 function playerUnit(u,slot,r){
  let cls='',badge='';
  if(selected&&state.phase==='attach'){const pv=previewFor(slot,selected);
   if(pv.reason){cls='no';badge=`<span class="delta no">${shortReason[pv.reason]??'불가'}</span>`;}
   else{const d=pv.reading.score-r.score;cls='ok';badge=`<span class="delta ${d>0?'up':d<0?'down':''}">${d>0?'+':''}${d}</span>`;}}
- if(!u)return `<button type="button" class="punit vacant ${cls} ${fx?.attached===slot?'slap':''}" data-action="attach" data-slot="${slot}" aria-label="빈 자리 ${slot+1}">${badge}<span class="vacant-mark">+</span><span class="uname">빈 자리</span><span class="recipe">캐릭터 카드</span></button>`;
- return `<button type="button" class="punit ${cls} ${fx?.attached===slot?'slap':''}" data-action="attach" data-slot="${slot}" aria-label="${nameOf(u.characterDefId)}${selected?'에게 놓기':' 정보'}">${badge}${unitBadges(u,state.battle)}<canvas data-render="${u.instanceId}"></canvas><span class="uname">${nameOf(u.characterDefId)}</span>${recipeChip(u,r)}</button>`;
+ if(!u)return `<button type="button" class="punit vacant ${cls} ${fx?.attached===slot?'slap':''}" data-action="attach" data-slot="${slot}" aria-label="빈 자리 ${slot+1}">${badge}<span class="vacant-mark">+</span></button>`;
+ const rm=recipeMark(u,r),recipe=recipeFor(u,c);
+ return `<button type="button" class="punit ${cls} ${rm.cls} ${fx?.attached===slot?'slap':''}" data-action="attach" data-slot="${slot}" aria-label="${nameOf(u.characterDefId)}${recipe?' '+recipe.name:''}${selected?'에게 놓기':' 정보'}">${badge}${unitBadges(u,state.battle)}<canvas data-render="${u.instanceId}"></canvas>${rm.html}</button>`;
 }
 function playerZone(){
  const r=reading(),acc=state.run.accumulated;
@@ -1002,22 +1040,29 @@ function playerZone(){
 function comboTray(){
  const r=reading(),burst=new Set((fx?.changes??[]).filter(x=>x.gain&&x.axis).map(x=>x.axis));
  const lv=k=>levelOf(state.run.levels,k);
- return `<button type="button" class="tray" data-action="combos" aria-label="족보 설명 보기">${c.comboAxes.map(axis=>{const m=r.matches.find(x=>x.axis===axis);return `<span class="axis ${m?(m.complete?'full':'part'):''} ${burst.has(axis)?'burst':''}"><small>${axisLabels[axis]}</small><b>${m?comboLabels[m.kind]:'—'}</b><em>${m?'+'+number(m.bonus):''}</em></span>`;}).join('')}
- <span class="combo-levels">${c.comboLevelKinds.map(k=>`<span class="${lv(k)>1?'up':''}">${levelKindLabels[k]}<b>Lv${lv(k)}</b></span>`).join('')}</span></button>`;
+ return `<button type="button" class="tray" data-action="combos" aria-label="족보 설명 보기">${c.comboAxes.map(axis=>{const m=r.matches.find(x=>x.axis===axis);return `<span class="axis ${m?(m.complete?'full':'part'):'empty'} ${burst.has(axis)?'burst':''}" title="${m?comboLabels[m.kind]:''}"><small>${axisLabels[axis]}</small>${m?`<b class="glyph">${kindGlyph[m.kind]}</b><em>+${number(m.bonus)}</em>`:''}</span>`;}).join('')}
+ ${c.comboLevelKinds.some(k=>lv(k)>1)?`<span class="combo-levels">${c.comboLevelKinds.filter(k=>lv(k)>1).map(k=>`<span class="up">${kindGlyph[k]}<b>Lv${lv(k)}</b></span>`).join('')}</span>`:''}</button>`;
 }
+// 고른 카드의 이름과 효과 한 줄(발라트로의 카드 설명 말풍선 역할).
+function cardTip(card){
+ if(card.characterDefId)return `<b>${nameOf(card.characterDefId)}</b> 빈 자리에 합류. 캐릭터 위에 놓으면 교체(스티커 유지)`;
+ const s=byId(c.stickers,card.stickerDefId);
+ if(s.kind==='star')return `<b>별</b> 별 Lv+1, 기초 +${c.balance.starPower}`;
+ if(s.kind==='weapon')return `<b>${nameOf(s.payloadId)}</b> 기초 +${byId(c.weapons,s.payloadId).powerBonus}. 속성과 함께면 조합 무기`;
+ return `<b>${nameOf(s.payloadId)}</b> 같은 속성이면 Lv+1, 다르면 교체하고 Lv1부터`;
+}
+const introDone=()=>seenTips.has('intro-done');
 function hintText(){
- const b=state.battle,sel=b.hand.find(x=>x.instanceId===selected),selDef=sel?.stickerDefId?byId(c.stickers,sel.stickerDefId):null;
- if(sel?.characterDefId)return '빈 자리에 놓거나, 교체할 캐릭터를 누르세요. 스티커와 레벨은 옮겨져요';
- if(selDef?.kind==='element')return '같은 속성은 Lv+1, 다른 속성은 교체하고 Lv1부터';
- if(selDef?.kind==='star')return '별 Lv가 오를수록 기초 점수가 커져요';
- if(sel)return '숫자는 붙였을 때 점수 변화예요';
+ const b=state.battle,sel=b.hand.find(x=>x.instanceId===selected);
+ if(sel)return cardTip(sel);
+ if(introDone())return '';
  if(b.actionsUsed>=c.balance.attachLimit)return b.turn<c.balance.turnsPerBlind?'다 붙였어요. 턴을 넘기세요':'다 붙였어요. 전투하세요';
  if(!members(state.run.team).length)return '캐릭터 카드를 빈 자리에 놓으세요';
  return '스티커를 끌어서 캐릭터에 붙이세요';
 }
 function handDock(){
  const b=state.battle,left=c.balance.attachLimit-b.actionsUsed,last=b.turn>=c.balance.turnsPerBlind;
- return `<footer class="dock"><div class="hand-head"><span class="hint" id="hint">${hintText()}</span><span class="uses" aria-label="남은 붙이기 ${left}회">${Array.from({length:c.balance.attachLimit},(_,i)=>`<i class="${i<left?'on':''}"></i>`).join('')}</span></div>
+ return `<footer class="dock"><div class="hand-head"><span class="hint ${selected?'card-tip':''}" id="hint">${hintText()}</span><span class="uses" aria-label="남은 붙이기 ${left}회">${Array.from({length:c.balance.attachLimit},(_,i)=>`<i class="${i<left?'on':''}"></i>`).join('')}</span></div>
  <div class="hand">${b.hand.length?b.hand.map((card,i,arr)=>handCard(card,i,arr.length,left<=0)).join(''):'<p class="empty">손패가 없어요</p>'}</div>
  <div class="actions"><button type="button" class="deck-mini" data-action="deck" aria-label="덱 보기"><b>${b.drawPile.length}</b><small>${uiIcon('cards')} 남은 덱</small></button><button type="button" class="go ${last?'fight':''}" data-action="end">${last?'전투!':'턴 종료'}</button></div></footer>`;
 }
@@ -1090,10 +1135,45 @@ function renderRunResult(){
  <div class="party">${members(state.run.team).map(u=>`<div class="punit static">${unitBadges(u,state.battle,true)}<canvas data-render="${u.instanceId}"></canvas><span class="uname">${nameOf(u.characterDefId)}</span></div>`).join('')}</div></main><footer class="dock"><button type="button" class="go" data-action="restart">다시 원정</button></footer>`;
 }
 
+/* ── 신규 유저 안내 ── */
+// 상황이 처음 생길 때 한 번만 뜨는 팁. 본 팁은 브라우저에 기억한다(저장이 막혀 있어도 동작은 한다).
+const TIP_KEY='stickerBattle.tips.v1';
+const seenTips=(()=>{try{return new Set(JSON.parse(localStorage.getItem(TIP_KEY)??'[]'));}catch{return new Set();}})();
+function saveTips(){try{localStorage.setItem(TIP_KEY,JSON.stringify([...seenTips]));}catch{}}
+const attaching=()=>state.phase==='attach';
+const tips=[
+ {id:'goal',when:()=>attaching()&&state.battle.blindIndex===0&&state.battle.turn===1,text:'카드를 끌어 원정대에 붙여요. 6턴이 끝났을 때 점수가 목표를 넘으면 통과!'},
+ {id:'combo',when:()=>attaching()&&reading().matches.length>0,text:'같은 종족·직업·무기·속성이 2명이면 페어(••), 3명이면 트리플(•••), 모두 다르면 컬렉션(△□○)! 족보 칸이 밝아지고 점수가 붙어요.'},
+ {id:'element',when:()=>attaching()&&members(state.run.team).some(u=>u.elementId),text:'속성이 블라인드 속성을 이기면 ▲ 배율이 오르고, 지면 ▼ 내려가요. 같은 속성을 또 붙이면 Lv이 올라요.'},
+ {id:'recipe',when:()=>attaching()&&members(state.run.team).some(u=>recipeFor(u,c)),text:'무기 + 속성 = 조합 무기! 불은 배율, 물은 기초 점수, 번개는 턴마다 쌓여요. 캐릭터가 빛나면 효과 발동 중이에요.'},
+ {id:'next',when:()=>attaching()&&state.battle.turn>=4&&!!state.battle.nextElementId,text:'다음 블라인드 속성이 공개됐어요. ! 표시 캐릭터는 다음 블라인드에서 불리해요.'},
+ {id:'fight',when:()=>attaching()&&state.battle.turn===c.balance.turnsPerBlind,text:'마지막 턴! 전투를 누르면 점수가 목표를 넘는지 판정해요.'},
+ {id:'reward',when:()=>state.phase==='reward_reveal',text:'원하는 카드를 봐 두세요. 섞는 동안 눈으로 쫓아가면 그 카드를 가질 수 있어요!'},
+];
+let activeTip=null;
+// 띄운 팁은 닫거나 상황이 지나갈 때까지 유지하고, 한 번 띄운 팁은 다시 띄우지 않는다.
+function pickTip(){
+ if(activeTip&&!activeTip.when()){seenTips.add(activeTip.id);saveTips();activeTip=null;}
+ if(!activeTip&&!selected)activeTip=tips.find(t=>!seenTips.has(t.id)&&t.when())??null;
+ return activeTip;
+}
+function dismissTip(){if(activeTip){seenTips.add(activeTip.id);saveTips();activeTip=null;}render();}
+// 첫 블라인드 1~2턴: 점수가 가장 오르는 카드와 자리를 반짝여, 따라만 해도 첫 족보를 경험하게 한다.
+function suggestion(){
+ const b=state.battle;if(!attaching()||b.blindIndex!==0||b.turn>2||selected||b.actionsUsed>=c.balance.attachLimit)return null;
+ const base=reading().score;let best=null;
+ for(const card of b.hand)for(let slot=0;slot<c.balance.teamSize;slot++){const pv=previewFor(slot,card.instanceId);if(pv.reason)continue;const d=pv.reading.score-base;if(!best||d>best.d)best={card:card.instanceId,slot,d};}
+ return best&&best.d>0?best:null;
+}
+
 /* ── 렌더 ── */
 function render(){
  const f=fx,p=state.phase;
  app.innerHTML=p==='title'?renderTitle():p.startsWith('reward_')?renderReward():p==='run_result'?renderRunResult():renderBattle();
+ // 첫 블라인드 판정을 보면 상시 안내 줄을 끈다(고른 카드 설명은 계속).
+ if(p==='resolve'&&!introDone()){seenTips.add('intro-done');saveTips();}
+ const tip=pickTip();if(tip)app.querySelector('footer.dock')?.insertAdjacentHTML('afterbegin',`<div class="tip" role="note"><p>${tip.text}</p><button type="button" data-action="tip-ok">알겠어요</button></div>`);
+ const sg=p==='attach'?suggestion():null;if(sg){app.querySelector(`.hand [data-card="${sg.card}"]`)?.classList.add('suggest');app.querySelector(`.punit[data-slot="${sg.slot}"]`)?.classList.add('suggest');}
  for(const canvas of app.querySelectorAll('[data-render]')){
   const id=canvas.dataset.render,slot=state.run.team.characters.findIndex(u=>u?.instanceId===id),unit=state.run.team.characters[slot];
   if(unit){if(f?.attached===slot)canvas.dataset.evolve='yes';renderCharacter(canvas,unit,c);}
@@ -1138,7 +1218,7 @@ function afterRender(f){
  if(!f)return;
  if(f.attached!==undefined){
   const el=app.querySelector(`.punit[data-slot="${f.attached}"]`);if(f.delta)floatText(el,(f.delta>0?'+':'')+f.delta,f.delta>0?'up':'down');
-  f.changes.forEach((ch,i)=>setTimeout(()=>burst(ch.text,!ch.gain),i*420));
+  const big=f.recipe?`${f.recipe}!`:f.newCombo?`${comboLabels[f.newCombo]}!`:null;if(big)burst(big);
   flyCard(f.cardSnapshot,el);particles(el);
  }
  if(f.accumulated){const acc=document.getElementById('acc');if(acc){bump(acc,true);floatText(acc,'+'+number(f.accumulated.gain),'up');}}
@@ -1227,18 +1307,17 @@ function preview(target){
  const pv=previewFor(Number(target.dataset.slot),selected);
  if(pv.reason){setDuel(reading(),false);line.innerHTML=`<span class="loss">${messages[pv.reason]}</span>`;return;}
  target.classList.add('hover');setDuel(pv.reading,true);
- const bits=comboChanges(pv.before,pv.after).map(x=>`<span class="${x.gain?'gain':'loss'}">${x.text}</span>`);
- const rec=recipeFor(pv.unit,c),oldRec=pv.old?recipeFor(pv.old,c):null;
- if(rec&&oldRec?.id!==rec.id)bits.push(`<span class="gain">${rec.name} 완성</span>`);
- if(pv.def?.kind==='star')bits.unshift(`<span class="gain">★ Lv${pv.unit.starLevel}</span>`);
- if(pv.def?.kind==='element'){
-  if(pv.old.elementId===pv.def.payloadId)bits.unshift(`<span class="gain">${nameOf(pv.def.payloadId)} Lv${pv.unit.elementLevel}</span>`);
-  else if(pv.old.elementId)bits.unshift(`<span class="loss">${nameOf(pv.old.elementId)} Lv${pv.old.elementLevel} 사라짐</span>`);
-  const rel=relationOf(pv.unit.elementId,state.battle.elementId,c);if(rel!=='neutral')bits.push(`<span class="${rel==='advantage'?'gain':'loss'}">상성 ${rel==='advantage'?'유리':'불리'}</span>`);
- }
- if(pv.def?.kind==='weapon'&&pv.old.weaponId)bits.push(`<span class="loss">기존 ${nameOf(pv.old.weaponId)} 사라짐</span>`);
- if(pv.card.characterDefId&&pv.old)bits.unshift(`<span class="gain">${nameOf(pv.old.characterDefId)} → ${nameOf(pv.card.characterDefId)}, 스티커 유지</span>`);
- line.innerHTML=bits.join('');
+ // 발라트로가 족보 이름 하나만 보여주듯, 가장 중요한 결과 한 단어만: 잃는 것 > 조합 무기 > 족보 > 레벨·상성.
+ const rec=recipeFor(pv.unit,c),oldRec=pv.old?recipeFor(pv.old,c):null,rel=pv.def?.kind==='element'?relationOf(pv.unit.elementId,state.battle.elementId,c):'neutral';
+ const gained=pv.after.filter(m=>!pv.before.some(x=>x.ruleId===m.ruleId&&x.matchedValueId===m.matchedValueId)).sort((a,b)=>b.priority-a.priority)[0];
+ const word=pv.def?.kind==='element'&&pv.old.elementId&&pv.old.elementId!==pv.def.payloadId?['loss',`${nameOf(pv.old.elementId)} Lv${pv.old.elementLevel} 잃음`]
+  :pv.def?.kind==='weapon'&&pv.old.weaponId?['loss',`${nameOf(pv.old.weaponId)} 교체`]
+  :rec&&oldRec?.id!==rec.id?['gain',`${rec.name}!`]
+  :gained?['gain',`${comboLabels[gained.kind]}!`]
+  :pv.def?.kind==='star'?['gain',`★Lv${pv.unit.starLevel}`]
+  :rel!=='neutral'?[rel==='advantage'?'gain':'loss',rel==='advantage'?'유리!':'불리!']
+  :pv.def?.kind==='element'?['gain',`Lv${pv.unit.elementLevel}`]:null;
+ line.innerHTML=word?`<span class="${word[0]}">${word[1]}</span>`:'';
 }
 
 /* ── 바텀시트 ── */
@@ -1249,6 +1328,9 @@ function guaranteedText(){
  const g=c.characterRules.guaranteedTurns,t=ts=>ts.length>1?`${ts[0]}~${ts[ts.length-1]}턴`:`${ts[0]}턴`,rest=g.slice(1).map(t);
  return rest.every(x=>x===rest[0])?`블라인드 1은 ${t(g[0])}, 이후 블라인드는 ${rest[0]}에`:g.map((ts,i)=>`블라인드 ${i+1}은 ${t(ts)}`).join(', ')+'에';
 }
+document.getElementById('info-content').addEventListener('click',e=>{
+ if(e.target.closest('[data-help="tips"]')){seenTips.clear();saveTips();activeTip=null;document.getElementById('info').close();render();}
+});
 function showRules(){const t=c.balance;openInfo(`<h2>원정 규칙</h2><ol>
 <li>원정은 블라인드 ${c.blinds.length}개. 블라인드마다 ${t.turnsPerBlind}턴을 진행하고, 마지막 턴이 끝나면 점수가 목표 이상인지 판정해요. 못 넘기면 원정이 끝나요.</li>
 <li>매 턴 손패 ${t.handSize}장을 받고 최대 ${t.attachLimit}번 붙여요. 남은 카드는 턴 종료 때 버려져요.</li>
@@ -1258,7 +1340,7 @@ function showRules(){const t=c.balance;openInfo(`<h2>원정 규칙</h2><ol>
 <li><b>무기</b>: 기초 +${t.weaponPower}. 무기와 속성이 함께 있으면 조합 무기가 돼요.</li>
 <li><b>상성</b>: ${cycleText()}. 블라인드 속성을 이기면 ×(1+${t.affinityPerLevel}×속성Lv), 지면 그만큼 나눠요.</li>
 <li>점수는 <b>기초 × 배율</b>. 기초는 캐릭터·무기·별·족보·물 조합 효과·누적의 합, 배율은 족보 레벨·불 조합 효과·상성을 곱한 값이에요.</li>
-<li>원정대는 블라인드가 바뀌어도 그대로예요. 블라인드를 넘기면 보상 카드 3장을 섞어 1장을 뽑아요.</li></ol><p class="note">현재 수치는 재미와 균형 확인용 임시값입니다.</p>`);}
+<li>원정대는 블라인드가 바뀌어도 그대로예요. 블라인드를 넘기면 보상 카드 3장을 섞어 1장을 뽑아요.</li></ol><p class="note">현재 수치는 재미와 균형 확인용 임시값입니다.</p><button type="button" class="ghost help-tips" data-help="tips">처음 안내 다시 보기</button>`);}
 function showAffinity(){openInfo(`<h2>상성</h2><p>${cycleText()}. 캐릭터마다 블라인드 속성과 비교해요.</p><table class="table"><tr><td>유리 ▲</td><td>×(1 + ${c.balance.affinityPerLevel} × 속성 Lv)</td></tr><tr><td>불리 ▼</td><td>÷(1 + ${c.balance.affinityPerLevel} × 속성 Lv)</td></tr><tr><td>무관</td><td>×1</td></tr></table><p class="note">다음 블라인드 속성은 미리 알려줘요. 그때 불리해질 캐릭터에는 ! 표시가 붙어요.</p>`);}
 function showCombos(){
  const lv=k=>levelOf(state.run?.levels,k),row=(kind,desc,axisBonus,starBonus)=>`<tr><td>${comboLabels[kind]}</td><td>${desc}</td><td>+${axisBonus} · 별 +${starBonus}×Lv</td></tr>`;
@@ -1290,6 +1372,7 @@ app.addEventListener('click',e=>{
  if(resolveRun){resolveRun.flush();e.preventDefault();return;}
  const el=e.target.closest('[data-action]');if(!el||el.disabled)return;
  switch(el.dataset.action){
+ case 'tip-ok':dismissTip();break;
  case 'rules':showRules();break;
  case 'recipes':showRecipes();break;
  case 'combos':showCombos();break;

@@ -178,3 +178,44 @@ test('무기 강화: 교체 캐릭터로 옮겨지고 점수에 반영된다', (
   run('PlaceCharacter', { cardInstanceId: 'x2', targetSlot: 0 });
   assert.deepEqual([s.run.team.characters[0].characterDefId, s.run.team.characters[0].weaponPlus], ['char_elf_mage', 2]);
 });
+
+test('조기 전투: 아무 턴에나 판정하고, 이기면 다이아몬드 = 기본 + 남은 턴', () => {
+  let s = game.initialState(), n = 0;
+  const run = (type, p = {}) => { const r = game.applyCommand(s, { type, commandId: `f${n++}`, ...p }, c); assert.equal(r.error, null, `${type}: ${r.error}`); s = r.state; return r; };
+  run('StartRun', { seed: 9 });
+  s = structuredClone(s);
+  s.run.team.characters = [unit(0, 'human_warrior', { starLevel: 60 }), null, null];
+  const projected = game.projectedScore(s.run, s.battle, c, s.run.team, true).score;
+  assert.ok(projected >= s.battle.target);
+  run('EndTurn', { fight: true });
+  assert.equal(s.phase, 'resolve');
+  assert.equal(s.battle.lastScore.score, projected);
+  const left = c.balance.turnsPerBlind - 1;
+  assert.equal(s.battle.diamonds, c.metaRules.clearDiamonds + left * c.metaRules.diamondsPerTurnLeft);
+  assert.deepEqual([s.history[0].turn, s.history[0].diamonds, s.run.diamonds], [1, s.battle.diamonds, s.battle.diamonds]);
+});
+
+test('조기 전투에서 지면 다이아몬드 없이 런 종료', () => {
+  let s = game.initialState(), n = 0;
+  const run = (type, p = {}) => { const r = game.applyCommand(s, { type, commandId: `l${n++}`, ...p }, c); assert.equal(r.error, null); s = r.state; };
+  run('StartRun', { seed: 9 }); run('EndTurn', { fight: true });
+  assert.deepEqual([s.battle.outcome, s.battle.diamonds, s.run.diamonds], ['lose', 0, 0]);
+  run('FinishResolution');
+  assert.equal(s.phase, 'run_result');
+});
+
+test('보스 규칙: 보스 블라인드에만 걸리고 각 봉인이 점수에서 빠진다', () => {
+  let s = game.initialState();
+  s = game.applyCommand(s, { type: 'StartRun', commandId: 'b0', seed: 3 }, c).state;
+  assert.ok(c.bossRules.some(r => r.id === s.run.bossRuleId));
+  assert.equal(s.battle.ruleId, null);
+  const team = { characters: [unit(0, 'human_warrior', { weaponId: 'weapon_sword', weaponPlus: 1, elementId: 'element_fire', elementLevel: 1, starLevel: 2 }), unit(1, 'human_archer', { weaponId: 'weapon_sword', starLevel: 2 }), null] };
+  const score = rule => rules.scoreTeam(team, { target: 100, elementId: null, ruleId: rule }, { levels: {} }, c);
+  const free = score(null);
+  assert.equal(score('rule_seal_weapon').weapons, 0);
+  assert.equal(score('rule_seal_star').stars, 0);
+  assert.ok(free.matches.some(m => m.kind === 'pair'));
+  assert.ok(!score('rule_seal_pair').matches.some(m => m.kind === 'pair'));
+  assert.deepEqual(score('rule_seal_recipe').effects, []);
+  assert.ok(free.effects.length > 0);
+});

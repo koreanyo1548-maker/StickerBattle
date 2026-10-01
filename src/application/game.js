@@ -1,16 +1,16 @@
 modules["src/application/game.mjs"]=(()=>{
 const {byId}=modules["src/content/data.mjs"];
-const {makeUnit,attachUnit,attachmentReason,evaluateCombos,recipeFor,scoreTeam,turnEndGain,shuffle,weightedPick,drawCards,nextRandom}=modules["src/domain/rules.mjs"];
+const {makeUnit,attachUnit,attachmentReason,activeCombos,recipeFor,scoreTeam,turnEndGain,shuffle,weightedPick,drawCards,nextRandom}=modules["src/domain/rules.mjs"];
 
-// 흐름: title → (블라인드마다) attach ×6턴 → resolve → reward_reveal → reward_pick → reward_done → 다음 블라인드
+// 흐름: title → (블라인드마다) attach 최대 6턴(언제든 조기 전투) → resolve → reward_reveal → reward_pick → reward_done → 다음 블라인드
 //       목표 미달이거나 마지막 블라인드를 넘기면 run_result.
 const initialState=()=>({phase:'title',run:null,battle:null,reward:null,appliedCommandIds:[],events:[],history:[]});
 const progressOf=run=>({levels:run.levels,accumulated:run.accumulated});
-const blindOf=(b)=>({target:b.target,elementId:b.elementId});
-// 지금 전투하면 판정될 점수. 마지막 턴에는 턴 종료 누적이 판정 직전에 더해지므로 미리 포함한다.
+const blindOf=(b)=>({target:b.target,elementId:b.elementId,ruleId:b.ruleId??null});
+// 지금 전투하면 판정될 점수. 전투(마지막 턴 또는 조기 전투)는 턴 종료 누적이 판정 직전에 더해지므로 미리 포함한다.
 // 화면의 예상 점수와 EndTurn의 판정이 같은 함수를 쓴다. team을 주면 그 편성으로 계산한다(미리보기용).
-function projectedScore(run,b,c,team=run.team){
- const gain=b.turn>=c.balance.turnsPerBlind?turnEndGain(team,progressOf(run),c):0;
+function projectedScore(run,b,c,team=run.team,fight=false){
+ const gain=fight||b.turn>=c.balance.turnsPerBlind?turnEndGain(team,progressOf(run),c,blindOf(b)):0;
  return scoreTeam(team,blindOf(b),{levels:run.levels,accumulated:run.accumulated+gain},c);
 }
 function validateAttachment(state,command,c){
@@ -41,7 +41,7 @@ function startBlind(s,c){
  const r=s.run,i=r.blindIndex,blind=c.blinds[i],blindId=`${r.runId}:blind:${i}`;
  const deck=r.deckDefIds.map((id,k)=>({instanceId:`${blindId}:card:${k}`,stickerDefId:id})),sh=shuffle(deck,r.rngState);
  const elementId=r.blindElements[i],monsterId=blind.boss?c.bossMonsterId:c.monsters.find(m=>m.elementId===elementId).id;
- s.battle={blindId,blindIndex:i,target:blind.target,boss:blind.boss,monsterId,elementId,nextElementId:r.blindElements[i+1]??null,turn:0,actionsUsed:0,drawPile:sh.list,hand:[],discardPile:[],rngState:sh.seed,lastScore:null,outcome:null};
+ s.battle={blindId,blindIndex:i,target:blind.target,boss:blind.boss,monsterId,elementId,ruleId:blind.boss?r.bossRuleId:null,turn:0,actionsUsed:0,drawPile:sh.list,hand:[],discardPile:[],rngState:sh.seed,lastScore:null,outcome:null};
  s.events.push({type:'BlindStarted',blindIndex:i,elementId:s.battle.elementId,target:blind.target});
  beginTurn(s,c);
 }
@@ -75,12 +75,13 @@ function applyCommand(state,cmd,c){
   if(s.phase!=='title')return fail('phase');
   const seed=cmd.seed>>>0||1;let rng=seed;
   const blindElements=c.blinds.map(()=>{const r=nextRandom(rng);rng=r.seed;return c.elements[Math.floor(r.value*c.elements.length)].id;});
-  s.run={schemaVersion:4,contentVersion:c.version,runId:`run_${seed}`,seed,rngState:rng,blindIndex:0,blindElements,team:{characters:Array(c.balance.teamSize).fill(null)},levels:{},accumulated:0,deckDefIds:[...c.initialDeck],result:null};
+  const rr=nextRandom(rng);rng=rr.seed;const bossRuleId=c.bossRules[Math.floor(rr.value*c.bossRules.length)].id;
+  s.run={schemaVersion:5,contentVersion:c.version,runId:`run_${seed}`,seed,rngState:rng,blindIndex:0,blindElements,bossRuleId,diamonds:0,team:{characters:Array(c.balance.teamSize).fill(null)},levels:{},accumulated:0,deckDefIds:[...c.initialDeck],result:null};
   s.history=[];startBlind(s,c);break;
  }
  case 'AttachSticker':{
   const b=s.battle,team=s.run.team,idx=b.hand.findIndex(x=>x.instanceId===cmd.stickerInstanceId),card=b.hand[idx],def=byId(c.stickers,card.stickerDefId),ui=team.characters.findIndex(u=>u?.instanceId===cmd.targetInstanceId),old=team.characters[ui];
-  const before=evaluateCombos(team,c,s.run.levels);team.characters[ui]=attachUnit(old,def,c).unit;b.discardPile.push(...b.hand.splice(idx,1));b.actionsUsed++;
+  const before=activeCombos(team,c,s.run.levels,blindOf(b));team.characters[ui]=attachUnit(old,def,c).unit;b.discardPile.push(...b.hand.splice(idx,1));b.actionsUsed++;
   const now=team.characters[ui];
   s.events.push({type:'StickerAttached',targetInstanceId:old.instanceId,stickerDefId:def.id});
   if(def.kind==='star')s.events.push({type:'StarLeveled',targetInstanceId:old.instanceId,level:now.starLevel});
@@ -88,26 +89,29 @@ function applyCommand(state,cmd,c){
   else if(def.kind==='element'&&old.elementId)s.events.push({type:'ElementReplaced',targetInstanceId:old.instanceId,from:old.elementId,lostLevel:old.elementLevel});
   else if(def.kind==='weapon'&&old.weaponId===def.payloadId)s.events.push({type:'WeaponEnhanced',targetInstanceId:old.instanceId,plus:now.weaponPlus});
   else if(def.kind==='weapon'&&old.weaponId)s.events.push({type:'EquipmentReplaced',targetInstanceId:old.instanceId,from:old.weaponId,lostPlus:old.weaponPlus??0});
-  const after=evaluateCombos(team,c,s.run.levels);if(JSON.stringify(before)!==JSON.stringify(after))s.events.push({type:'ComboChanged',matches:after});break;
+  const after=activeCombos(team,c,s.run.levels,blindOf(b));if(JSON.stringify(before)!==JSON.stringify(after))s.events.push({type:'ComboChanged',matches:after});break;
  }
  case 'PlaceCharacter':{
   const b=s.battle,team=s.run.team,idx=b.hand.findIndex(x=>x.instanceId===cmd.cardInstanceId),card=b.hand[idx],slot=cmd.targetSlot,old=team.characters[slot];
-  const before=evaluateCombos(team,c,s.run.levels);team.characters[slot]=placeUnit(old,slot,card.characterDefId);b.hand.splice(idx,1);b.actionsUsed++;
+  const before=activeCombos(team,c,s.run.levels,blindOf(b));team.characters[slot]=placeUnit(old,slot,card.characterDefId);b.hand.splice(idx,1);b.actionsUsed++;
   s.events.push(old?{type:'CharacterReplaced',slot,from:old.characterDefId,to:card.characterDefId}:{type:'CharacterPlaced',slot,characterDefId:card.characterDefId});
-  const after=evaluateCombos(team,c,s.run.levels);if(JSON.stringify(before)!==JSON.stringify(after))s.events.push({type:'ComboChanged',matches:after});break;
+  const after=activeCombos(team,c,s.run.levels,blindOf(b));if(JSON.stringify(before)!==JSON.stringify(after))s.events.push({type:'ComboChanged',matches:after});break;
  }
  case 'EndTurn':{
+  // fight: 마지막 턴이 아니어도 지금 전투한다(조기 전투). 남은 턴은 다이아몬드 보너스가 된다.
   if(s.phase!=='attach')return fail('phase');
-  const b=s.battle,r=s.run,last=b.turn>=c.balance.turnsPerBlind;
-  // 마지막 턴은 누적을 더하기 전 상태로 판정 점수를 구한다(projectedScore가 누적을 포함한다).
-  const res=last?projectedScore(r,b,c):null,gain=turnEndGain(r.team,progressOf(r),c);
+  const b=s.battle,r=s.run,last=b.turn>=c.balance.turnsPerBlind||cmd.fight===true;
+  // 전투는 누적을 더하기 전 상태로 판정 점수를 구한다(projectedScore가 누적을 포함한다).
+  const res=last?projectedScore(r,b,c,r.team,true):null,gain=turnEndGain(r.team,progressOf(r),c,blindOf(b));
   if(gain>0){r.accumulated+=gain;s.events.push({type:'Accumulated',gain,total:r.accumulated});}
   b.discardPile.push(...b.hand.filter(x=>x.stickerDefId));b.hand=[];
   if(!last){s.events.push({type:'TurnEnded',turn:b.turn});beginTurn(s,c);break;}
   // 마지막 턴: 목표 점수 판정.
   b.lastScore=res;b.outcome=res.score>=b.target?'win':'lose';r.rngState=b.rngState;s.phase='resolve';
-  s.history.push({blindIndex:b.blindIndex,target:b.target,score:res.score,outcome:b.outcome});
-  s.events.push({type:'BlindResolved',score:res.score,target:b.target,outcome:b.outcome});break;
+  const turnsLeft=c.balance.turnsPerBlind-b.turn,diamonds=b.outcome==='win'?c.metaRules.clearDiamonds+turnsLeft*c.metaRules.diamondsPerTurnLeft:0;
+  b.turnsLeft=turnsLeft;b.diamonds=diamonds;r.diamonds=(r.diamonds??0)+diamonds;
+  s.history.push({blindIndex:b.blindIndex,target:b.target,score:res.score,outcome:b.outcome,turn:b.turn,diamonds});
+  s.events.push({type:'BlindResolved',score:res.score,target:b.target,outcome:b.outcome,diamonds});break;
  }
  case 'FinishResolution':{
   if(s.phase!=='resolve')return fail('phase');

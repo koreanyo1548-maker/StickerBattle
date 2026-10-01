@@ -52,6 +52,10 @@ function evaluateCombos(team,c,levels){
  }
  return found;
 }
+// 보스 규칙의 봉인. blind.ruleId가 없으면 null.
+const sealOf=(blind,c)=>blind?.ruleId?byId(c.bossRules,blind.ruleId).seal:null;
+// 점수에 실제로 쓰이는 족보: 페어 봉인이면 페어를 뺀다. 화면의 칸·미리보기도 이것을 쓴다.
+function activeCombos(team,c,levels,blind){const m=evaluateCombos(team,c,levels);return sealOf(blind,c)==='pair'?m.filter(x=>x.kind!=='pair'):m;}
 // 조합 무기 효과의 레벨별 세기. 효과 문구(화면)도 이 함수를 쓴다.
 const effectStrength=(effect,level)=>byLevel(effect.value,effect.perLevel,level);
 // 무기 기초 점수: 무기 기본값 + 강화 수치 × weaponPlusPower.
@@ -100,12 +104,13 @@ function evaluateAffinity(team,blindElementId,c){
 }
 // 점수 = floor(기초 × 배율) + 목표 비례 보너스. 기초 = 캐릭터·무기·별 + 족보 + 물 효과 + 번개 누적.
 // progress: {levels, accumulated}. blind: {target, elementId}.
+const noEffects={flat:0,multiplier:1,targetPercent:0,accumulateGain:0,effects:[]};
 function scoreTeam(team,blind,progress,c){
- const levels=progress?.levels??{},us=members(team);
- const matches=evaluateCombos(team,c,levels),effects=evaluateWeaponEffects(team,matches,c,levels),affinity=evaluateAffinity(team,blind.elementId,c);
+ const levels=progress?.levels??{},us=members(team),seal=sealOf(blind,c);
+ const matches=activeCombos(team,c,levels,blind),effects=seal==='recipe'?noEffects:evaluateWeaponEffects(team,matches,c,levels),affinity=evaluateAffinity(team,blind.elementId,c);
  const base=us.reduce((n,u)=>n+byId(c.characters,u.characterDefId).basePower,0);
- const weapons=us.reduce((n,u)=>n+weaponPower(u,c),0);
- const stars=us.reduce((n,u)=>n+u.starLevel*c.balance.starPower,0);
+ const weapons=seal==='weapon'?0:us.reduce((n,u)=>n+weaponPower(u,c),0);
+ const stars=seal==='star'?0:us.reduce((n,u)=>n+u.starLevel*c.balance.starPower,0);
  const combos=matches.reduce((n,m)=>n+m.bonus,0),accumulated=progress?.accumulated??0;
  const chips=base+weapons+stars+combos+effects.flat+accumulated;
  const comboMultiplier=matches.reduce((n,m)=>n*m.multiplier,1);
@@ -116,9 +121,9 @@ function scoreTeam(team,blind,progress,c){
  return {base,weapons,stars,combos,flat:effects.flat,accumulated,chips,comboMultiplier,effectMultiplier:effects.multiplier,affinity,multiplier,targetBonus,score:floor(chips*multiplier)+targetBonus,matches,effects:effects.effects,accumulateGain:effects.accumulateGain};
 }
 // 턴 종료 시 번개 조합 무기가 쌓는 양.
-function turnEndGain(team,progress,c){
- const levels=progress?.levels??{};
- return evaluateWeaponEffects(team,evaluateCombos(team,c,levels),c,levels).accumulateGain;
+function turnEndGain(team,progress,c,blind){
+ const levels=progress?.levels??{};if(sealOf(blind,c)==='recipe')return 0;
+ return evaluateWeaponEffects(team,activeCombos(team,c,levels,blind),c,levels).accumulateGain;
 }
 // 시드 기반 RNG: 순수한 상태 입출력. 같은 시드와 명령은 같은 결과를 만든다.
 function nextRandom(seed){let x=seed>>>0||1;x^=x<<13;x^=x>>>17;x^=x<<5;return {seed:x>>>0,value:(x>>>0)/4294967296};}
@@ -131,4 +136,4 @@ function drawCards(b,count){
  }
 }
 
-return {makeUnit,attachmentReason,attachUnit,levelOf,evaluateCombos,weaponPower,recipeFor,effectStrength,evaluateWeaponEffects,relationOf,evaluateAffinity,scoreTeam,turnEndGain,nextRandom,shuffle,weightedPick,drawCards};})();
+return {makeUnit,attachmentReason,attachUnit,levelOf,evaluateCombos,activeCombos,weaponPower,recipeFor,effectStrength,evaluateWeaponEffects,relationOf,evaluateAffinity,scoreTeam,turnEndGain,nextRandom,shuffle,weightedPick,drawCards};})();

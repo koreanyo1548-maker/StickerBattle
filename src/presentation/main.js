@@ -224,7 +224,8 @@ function renderBattle(){
  return stageTop(`<b>블라인드 ${b.blindIndex+1}</b>`)+
  `<main class="battle">${blindZone()}${scoreBoard()}${playerZone()}${comboTray()}</main>${handDock()}`;
 }
-const resultStamp=(win,b)=>`<div class="stamp ${win?'win':'lose'}" role="status">${win?'격파!':'패배'}${win?`<small>${gem('+'+b.diamonds)}${b.turnsLeft?` <em>조기 전투 +${b.turnsLeft*c.metaRules.diamondsPerTurnLeft}</em>`:''}</small>`:''}</div>`;
+// 결과 도장은 승패와 상관없이 화면(전투 영역) 정가운데, 뒤를 어둡게 깔고 찍는다.
+const resultStamp=(win,b)=>`<div class="verdict-layer ${win?'win':'lose'}"><div class="stamp ${win?'win':'lose'}" role="status">${win?'격파!':'패배'}${win?`<small>${gem('+'+b.diamonds)}${b.turnsLeft?` <em>조기 전투 +${b.turnsLeft*c.metaRules.diamondsPerTurnLeft}</em>`:''}</small>`:''}</div></div>`;
 // 전투 페이지: 원정대가 몬스터를 공격한다. 점수 = 데미지, 목표 = 몬스터 HP.
 // live(방금 전투 시작)면 playResolve가 HP를 채운 상태부터 연출하고, 아니면 결과 상태로 바로 그린다.
 function renderArena(){
@@ -233,10 +234,10 @@ function renderArena(){
  `<main class="arena ${live?'enter':win?'won':'lost'}" id="arena">
  <section class="foe-zone ${b.boss?'boss':''} ${!live&&win?'defeated':''}" id="blind-zone"><div class="blind-name"><strong>${nameOf(m.nameKey)}</strong>${b.boss?'<em class="boss-tag">보스</em>':''}${elementChip(b.elementId)}</div>${ruleChip(b)}
  <div class="monster-slot" aria-hidden="true">${ic(m.assetId,'monster-art')}</div>
- ${live?'':resultStamp(win,b)}<div class="hp" aria-label="몬스터 HP ${hp} / ${b.target}"><i id="hp" style="width:${live?100:hp/b.target*100}%"></i><span id="hp-text">HP ${live?b.target:hp} / ${b.target}</span></div></section>
+ <div class="hp" aria-label="몬스터 HP ${hp} / ${b.target}"><i id="hp" style="width:${live?100:hp/b.target*100}%"></i><span id="hp-text">HP ${live?b.target:hp} / ${b.target}</span></div></section>
  ${scoreBoard()}
  <div class="party arena-party">${members(state.run.team).map(u=>`<div class="punit static">${unitBadges(u,b)}<canvas data-render="${u.instanceId}"></canvas><span class="uname">${nameOf(u.characterDefId)}</span></div>`).join('')}</div>
- </main>${resolveDock()}`;
+ ${live?'':resultStamp(win,b)}</main>${resolveDock()}`;
 }
 
 // 블라인드 소개: 몬스터 이름·목표 점수·속성(유리한 속성)·보스 규칙.
@@ -246,8 +247,7 @@ function renderIntro(){
  <div class="intro-art monster-slot" aria-hidden="true">${ic(m.assetId,'monster-art')}</div>
  <h2>${nameOf(m.nameKey)}</h2>
  <div class="intro-stats"><div><small>목표 점수</small><b>${b.target}</b></div><div><small>속성</small>${elementChip(el.id)}${beater?`<span class="beat">유리 ${elementChip(beater)}</span>`:''}</div></div>
- ${ruleChip(b)}
- <p class="intro-note">${c.balance.turnsPerBlind}턴 안에 목표를 넘기세요. 일찍 이기면 ${gem('')} 다이아몬드를 더 받아요.</p></main>
+ ${ruleChip(b)}</main>
  <footer class="dock"><button type="button" class="go ${b.boss?'fight':''}" data-action="intro-ok">도전!</button></footer>`;
 }
 
@@ -479,7 +479,7 @@ async function playResolve(){
   // 버틴 몬스터의 반격: 원정대가 쓰러진다.
   if(!token.skip){zone.classList.add('counter');await wait(260);if(!reduced){const f=document.createElement('div');f.className='arena-flash';app.append(f);setTimeout(()=>f.remove(),500);app.classList.remove('quake');void app.offsetWidth;app.classList.add('quake');}}
  }
- zone.querySelector('.hp').insertAdjacentHTML('beforebegin',resultStamp(win,b));
+ arena.insertAdjacentHTML('beforeend',resultStamp(win,b));
  arena.classList.remove('enter');arena.classList.add(win?'won':'lost');
  finish.classList.remove('waiting');$('skip-hint')?.remove();resolveRun=null;
 }

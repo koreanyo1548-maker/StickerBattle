@@ -188,7 +188,7 @@ function hintText(){
 }
 function handDock(){
  const b=state.battle,left=c.balance.attachLimit-b.actionsUsed,last=b.turn>=c.balance.turnsPerBlind;
- return `<footer class="dock"><div class="hand-head"><span class="hint ${selected?'card-tip':''}" id="hint">${hintText()}</span><span class="uses" aria-label="남은 붙이기 ${left}회">${Array.from({length:c.balance.attachLimit},(_,i)=>`<i class="${i<left?'on':''}"></i>`).join('')}</span></div>
+ return `<footer class="dock"><div class="hand-head"><span class="turn-chip ${last?'last':''}" aria-label="${b.turn}/${c.balance.turnsPerBlind}턴">${last?'마지막 턴':`${b.turn}<small>/${c.balance.turnsPerBlind}턴</small>`}</span><span class="hint ${selected?'card-tip':''}" id="hint">${hintText()}</span><span class="uses" aria-label="남은 붙이기 ${left}회">${Array.from({length:c.balance.attachLimit},(_,i)=>`<i class="${i<left?'on':''}"></i>`).join('')}</span></div>
  <div class="hand">${b.hand.length?b.hand.map((card,i,arr)=>handCard(card,i,arr.length,left<=0)).join(''):'<p class="empty">손패가 없어요</p>'}</div>
  <div class="actions"><button type="button" class="deck-mini" data-action="deck" aria-label="덱 보기"><b>${b.drawPile.length}</b><small>${uiIcon('cards')} 남은 덱</small></button><button type="button" class="go ${last?'fight':''}" data-action="end">${last?'전투!':'턴 종료'}</button></div></footer>`;
 }
@@ -206,9 +206,23 @@ function resolveDock(){
  return `<footer class="dock"><ul class="steps" id="steps">${stepItems(b.lastScore)}</ul><p class="skip-hint" id="skip-hint">화면을 누르면 바로 결과를 봐요</p><button type="button" class="go" data-action="finish" id="finish">${win&&!last?'보상 뽑기':'원정 결과'}</button></footer>`;
 }
 function renderBattle(){
- const b=state.battle;
- return stageTop(`<b>블라인드 ${b.blindIndex+1}</b><span class="turn">${b.turn}/${c.balance.turnsPerBlind}턴</span>`)+
- `<main class="battle">${blindZone()}${scoreBoard()}${playerZone()}${comboTray()}</main>${state.phase==='attach'?handDock():resolveDock()}`;
+ const b=state.battle;if(state.phase!=='attach')return renderArena();
+ return stageTop(`<b>블라인드 ${b.blindIndex+1}</b>`)+
+ `<main class="battle">${blindZone()}${scoreBoard()}${playerZone()}${comboTray()}</main>${handDock()}`;
+}
+const resultStamp=win=>`<div class="stamp ${win?'win':'lose'}" role="status">${win?'격파!':'패배'}</div>`;
+// 전투 페이지: 원정대가 몬스터를 공격한다. 점수 = 데미지, 목표 = 몬스터 HP.
+// live(방금 전투 시작)면 playResolve가 HP를 채운 상태부터 연출하고, 아니면 결과 상태로 바로 그린다.
+function renderArena(){
+ const b=state.battle,r=b.lastScore,m=monsterOf(b.monsterId),live=!!fx?.resolve,win=b.outcome==='win',hp=Math.max(0,b.target-r.score);
+ return stageTop(`<b>블라인드 ${b.blindIndex+1}</b><span class="turn">전투</span>`)+
+ `<main class="arena ${live?'enter':win?'won':'lost'}" id="arena">
+ <section class="foe-zone ${b.boss?'boss':''} ${!live&&win?'defeated':''}" id="blind-zone"><div class="blind-name"><strong>${nameOf(m.nameKey)}</strong>${b.boss?'<em class="boss-tag">보스</em>':''}${elementChip(b.elementId)}</div>
+ <div class="monster-slot" aria-hidden="true">${ic(m.assetId,'monster-art')}</div>
+ ${live?'':resultStamp(win)}<div class="hp" aria-label="몬스터 HP ${hp} / ${b.target}"><i id="hp" style="width:${live?100:hp/b.target*100}%"></i><span id="hp-text">HP ${live?b.target:hp} / ${b.target}</span></div></section>
+ ${scoreBoard()}
+ <div class="party arena-party">${members(state.run.team).map(u=>`<div class="punit static">${unitBadges(u,b)}<canvas data-render="${u.instanceId}"></canvas><span class="uname">${nameOf(u.characterDefId)}</span></div>`).join('')}</div>
+ </main>${resolveDock()}`;
 }
 
 /* ── 타이틀 ── */
@@ -406,17 +420,17 @@ async function playResolve(){
  const b=state.battle,r=b.lastScore,$=id=>document.getElementById(id);
  const pend=new Set(),token={skip:false,flush(){this.skip=true;pend.forEach(fn=>fn());pend.clear();}};resolveRun=token;
  const wait=ms=>token.skip||reduced?Promise.resolve():new Promise(res=>{const fin=()=>{clearTimeout(t);pend.delete(fin);res();},t=setTimeout(fin,ms);pend.add(fin);});
- const count=async(el,from,to,ms)=>{const n=8;for(let i=1;i<=n&&!token.skip;i++){el.textContent=number(Math.round(from+(to-from)*i/n));await wait(ms/n);}el.textContent=number(to);};
- const chipsEl=$('chips'),multEl=$('mult'),scoreEl=$('my-score'),verdict=$('verdict'),finish=$('finish'),gauge=$('gauge'),zone=$('blind-zone');
- if(!chipsEl||!finish){resolveRun=null;return;}
- chipsEl.textContent='0';multEl.textContent='1';scoreEl.textContent='?';verdict.textContent='계산 중';verdict.className='verdict';finish.classList.add('waiting');gauge.style.width='0%';
+ const count=async(el,from,to,ms,fmt=number)=>{const n=8;for(let i=1;i<=n&&!token.skip;i++){el.textContent=fmt(Math.round(from+(to-from)*i/n));await wait(ms/n);}el.textContent=fmt(to);};
+ const chipsEl=$('chips'),multEl=$('mult'),scoreEl=$('my-score'),verdict=$('verdict'),finish=$('finish'),zone=$('blind-zone'),arena=$('arena'),hpEl=$('hp'),hpText=$('hp-text');
+ if(!chipsEl||!finish||!arena||!hpEl){resolveRun=null;return;}
+ chipsEl.textContent='0';multEl.textContent='1';scoreEl.textContent='?';verdict.textContent='계산 중';verdict.className='verdict';finish.classList.add('waiting');
  const steps=[...app.querySelectorAll('#steps li:not(.off)')];steps.forEach(li=>li.classList.add('pending'));
  let chips=0,mult=1,bonus=0;
  await wait(250);
  for(const li of steps){
   if(token.skip)break;
   li.classList.remove('pending');li.classList.add('hit');
-  const origin=li.dataset.unit?app.querySelector(`canvas[data-render="${li.dataset.unit}"]`)?.closest('.punit'):app.querySelector(li.dataset.src==='tray'?'.tray':'.party');if(origin&&!reduced){origin.classList.add('fx-source');setTimeout(()=>origin.classList.remove('fx-source'),420);}
+  const origin=li.dataset.unit?app.querySelector(`canvas[data-render="${li.dataset.unit}"]`)?.closest('.punit'):app.querySelector(li.dataset.src==='tray'?'.duel':'.arena-party');if(origin&&!reduced){origin.classList.add('fx-source','charge');setTimeout(()=>origin.classList.remove('fx-source','charge'),450);}
   const add=Number(li.dataset.add||0),mul=Number(li.dataset.mul||1),bn=Number(li.dataset.bonus||0);
   if(add){await count(chipsEl,chips,chips+add,520);chips+=add;bump(chipsEl.parentElement);}
   if(mul!==1){mult*=mul;multEl.textContent=number(mult);bump(multEl.parentElement,true);if(!reduced&&mul>1){app.classList.remove('quake');void app.offsetWidth;app.classList.add('quake');}}
@@ -427,12 +441,22 @@ async function playResolve(){
  chipsEl.textContent=number(r.chips);multEl.textContent=number(r.multiplier);
  await wait(160);
  await count(scoreEl,0,r.score,520);scoreEl.textContent=r.score;scoreEl.classList.add('slam');if(r.multiplier>=2)$('duel').classList.add('blaze');
- gauge.style.width=Math.min(100,r.score/b.target*100)+'%';
  await wait(380);
- const win=b.outcome==='win';
+ // 공격: 원정대가 달려들고, 점수만큼 HP가 깎인다.
+ const units=[...app.querySelectorAll('.arena-party .punit')],win=b.outcome==='win',hp=Math.max(0,b.target-r.score);
+ if(!token.skip&&!reduced)units.forEach((u,i)=>setTimeout(()=>{u.classList.add('charge');setTimeout(()=>u.classList.remove('charge'),450);},i*90));
+ await wait(300);
+ if(!token.skip){zone.classList.remove('hit');void zone.offsetWidth;zone.classList.add('hit');floatText(zone,'-'+number(r.score),'down dmg');particles(zone.querySelector('.monster-slot'),'#fff3c4',12);}
+ hpEl.style.width=hp/b.target*100+'%';await count(hpText,b.target,hp,600,v=>`HP ${v} / ${b.target}`);hpText.textContent=`HP ${hp} / ${b.target}`;
+ await wait(250);
  verdict.textContent=win?`목표 달성 +${r.score-b.target}`:`목표까지 ${b.target-r.score}`;verdict.className='verdict '+(win?'good':'bad');
- if(zone){zone.classList.remove('hurt');void zone.offsetWidth;zone.classList.add(win?'defeated':'hurt');}
- if(!token.skip){particles(zone?.querySelector('.monster-slot'),win?'#f5c64b':'#ef6a5b',win?24:10);burst(win?'격파!':'목표 미달',!win);}
+ if(win){zone.classList.add('defeated');if(!token.skip)particles(zone.querySelector('.monster-slot'),'#f5c64b',26);}
+ else{
+  // 버틴 몬스터의 반격: 원정대가 쓰러진다.
+  if(!token.skip){zone.classList.add('counter');await wait(260);if(!reduced){const f=document.createElement('div');f.className='arena-flash';app.append(f);setTimeout(()=>f.remove(),500);app.classList.remove('quake');void app.offsetWidth;app.classList.add('quake');}}
+ }
+ zone.querySelector('.hp').insertAdjacentHTML('beforebegin',resultStamp(win));
+ arena.classList.remove('enter');arena.classList.add(win?'won':'lost');
  finish.classList.remove('waiting');$('skip-hint')?.remove();resolveRun=null;
 }
 

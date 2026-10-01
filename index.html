@@ -256,9 +256,9 @@ main.battle{justify-content:space-between}
 .punit .recipe{display:flex;align-items:center;gap:3px}.punit .recipe i{font-style:normal;font-size:10px;opacity:.8}
 .punit .recipe.on.k-mul{background:#bf4439}.punit .recipe.on.k-add{background:#2867aa}.punit .recipe.on.k-acc{background:#9a7a18}
 .acc{font-family:var(--disp);font-weight:400;font-size:13px;background:#9a7a18;color:#fff4dd;border-radius:8px;padding:2px 8px}
-/* 손패 5장 */
-.hand{gap:5px}
-.hand .sticker{width:19%;min-height:100px;padding:8px 2px 6px;border-radius:13px}
+/* 손패 4장 */
+.hand{gap:6px}
+.hand .sticker{width:23%;min-height:100px;padding:8px 2px 6px;border-radius:13px}
 .hand .sicon{width:44px;height:40px}.hand .sname{font-size:14px}.hand .sdesc{font-size:10px;letter-spacing:-.3px}
 .hand .ccanvas{width:48px;height:48px}.hand .k-char .sname{font-size:12px}
 .hand .sticker::after{width:15px;height:15px;border-radius:0 13px 0 6px}
@@ -340,6 +340,46 @@ main.battle{justify-content:space-between}
 .hint.card-tip{padding:3px 10px;line-height:1.35;font-size:12.5px}
 .lv-wpn{display:flex;align-items:center;gap:1px;font-family:var(--disp);font-size:12px;line-height:1;background:#f5c64b;color:#41344e;border-radius:8px;padding:2px 6px 2px 2px;box-shadow:0 2px #7a5410}
 .lv-wpn .ic{width:15px;height:15px}
+/* 턴 표시: 핸드 위. 마지막 턴은 붉게 맥박 */
+.hand-head{justify-content:flex-start}.hand-head .hint{flex:1;min-width:0}
+.turn-chip{flex-shrink:0;font-family:var(--disp);font-size:18px;line-height:1;padding:5px 9px;border-radius:10px;background:#ffffff14;box-shadow:inset 0 0 0 1px #ffffff1f;color:var(--paper);white-space:nowrap}
+.turn-chip small{font-family:var(--ui);font-size:12px;color:var(--muted);margin-left:1px}
+.turn-chip.last{font-size:15px;padding:6px 10px;background:linear-gradient(#ff9a7e,#e0473b);color:#fff;text-shadow:0 1px #0004;box-shadow:0 0 0 2px #ffc2b3,0 0 12px #e0473b88;animation:lastTurn 1.4s ease-in-out infinite}
+@keyframes lastTurn{50%{transform:scale(1.06);box-shadow:0 0 0 2px #ffc2b3,0 0 22px #e0473bcc}}
+/* 전투 페이지: 몬스터 HP = 목표 점수, 점수 = 데미지 */
+main.arena{justify-content:space-between;padding-top:2px}
+.foe-zone{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 12px 12px;border-radius:18px;background:radial-gradient(ellipse at 50% 72%,#6a3346,#291d30 72%);border:1px solid #a16a694f;box-shadow:0 4px 0 #100b1b55}
+.foe-zone.boss{background:radial-gradient(ellipse at 50% 72%,#56378a,#291d30 72%);border-color:#b18ae066}
+.foe-zone .monster-slot{width:150px;height:150px}
+.hp{position:relative;width:100%;max-width:300px;height:22px;border-radius:11px;background:#0008;overflow:hidden;box-shadow:inset 0 0 0 2px #ffffff22}
+.hp i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(#ff8a78,#d63c2f);border-radius:11px;transition:width .6s cubic-bezier(.2,.7,.2,1)}
+.hp span{position:relative;display:block;text-align:center;font-family:var(--disp);font-size:14px;line-height:22px;color:#fff;text-shadow:0 1px 2px #000;font-variant-numeric:tabular-nums}
+.foe-zone.hit .monster-art{animation:hit .4s}
+.foe-zone.counter .monster-art{animation:counter .5s}
+.foe-zone.defeated .monster-art{animation:defeat .7s forwards}.foe-zone.defeated .monster-slot::after{opacity:0}
+/* 결과 도장: 몬스터 위에 남는다 */
+.stamp{position:absolute;left:50%;top:44%;z-index:5;transform:translate(-50%,-50%) rotate(-8deg);font-family:var(--disp);font-size:46px;line-height:1;padding:6px 18px 8px;border-radius:14px;border:4px solid currentColor;white-space:nowrap;pointer-events:none;animation:stampIn .45s cubic-bezier(.2,.7,.2,1.3) both}
+.stamp.win{color:var(--gold);background:#2a1c10cc;text-shadow:0 3px 0 #7a5410;box-shadow:0 0 24px #f5c64b88}
+.stamp.lose{color:#ff7a68;background:#2a1018d9;text-shadow:0 3px 0 #6e1f16;box-shadow:0 0 24px #e0473b88}
+@keyframes stampIn{from{opacity:0;transform:translate(-50%,-50%) rotate(-8deg) scale(2.4)}}
+@media(prefers-reduced-motion:reduce){.stamp{animation:none}}
+.floater.dmg{top:38%;font-size:40px;color:#fff3c4;text-shadow:0 3px 0 #9d2a22,0 0 14px #ff9a3c}
+.arena-party .punit{transition:filter .5s}
+.arena-party .punit.charge canvas{animation:charge .45s}
+.arena.won .arena-party canvas{animation:cheer .5s ease-in-out 3}
+.arena.lost .arena-party .punit{filter:grayscale(.85) brightness(.65)}
+.arena.lost .arena-party canvas{rotate:-10deg;translate:0 8px;transition:rotate .5s,translate .5s}
+.arena-flash{position:absolute;inset:0;z-index:40;pointer-events:none;background:#e0473b;animation:flash .5s forwards}
+.arena.enter .foe-zone{animation:foeIn .5s both}.arena.enter .arena-party{animation:partyIn .5s .1s both}
+@keyframes hit{25%{transform:translateX(-10px) scale(.92);filter:brightness(2.6)}60%{transform:translateX(7px)}}
+@keyframes counter{40%{transform:translateY(34px) scale(1.18)}}
+@keyframes charge{40%{transform:translateY(-22px) scale(1.1)}}
+@keyframes cheer{50%{transform:translateY(-10px)}}
+@keyframes flash{from{opacity:.5}to{opacity:0}}
+@keyframes foeIn{from{opacity:0;transform:translateY(-30px) scale(.9)}}
+@keyframes partyIn{from{opacity:0;transform:translateY(30px)}}
+@media(max-height:760px){.foe-zone .monster-slot{width:112px;height:112px}.turn-chip{font-size:16px}}
+@media(prefers-reduced-motion:reduce){.turn-chip.last,.arena.enter .foe-zone,.arena.enter .arena-party,.arena.won .arena-party canvas{animation:none}}
 </style></head><body><div id="app"></div><div id="toast" role="status" aria-live="polite"></div><dialog id="info"><div id="info-content"></div><form method="dialog"><button class="go">닫기</button></form></dialog><script>(()=>{'use strict';const modules={};
 modules["src/content/art.mjs"]=(()=>{
 
@@ -391,7 +431,7 @@ const {applyArt}=modules["src/content/art.mjs"];
 
 // 수치는 이 표에서만 수정한다. 데이터에는 화면 요소나 로직을 저장하지 않는다.
 // 레벨 효과는 모두 value + perLevel×(Lv−1) 형태다.
-const balance = Object.freeze({teamSize:3, blindCount:4, turnsPerBlind:6, handSize:5, attachLimit:3, basePower:5, weaponPower:5, weaponPlusPower:5, starPower:3, affinityPerLevel:0.25, comboBonusPerLevel:1, comboMultPerLevel:0.25});
+const balance = Object.freeze({teamSize:3, blindCount:4, turnsPerBlind:6, handSize:4, attachLimit:2, basePower:5, weaponPower:5, weaponPlusPower:5, starPower:3, affinityPerLevel:0.25, comboBonusPerLevel:1, comboMultPerLevel:0.25});
 const labels = {
   race_human:'인간', race_elf:'엘프', race_orc:'오크', race_dwarf:'드워프', job_warrior:'전사', job_archer:'궁수', job_mage:'마법사',
   weapon_sword:'검', weapon_bow:'활', weapon_staff:'지팡이', element_fire:'불', element_water:'물', element_lightning:'번개', sticker_star:'별',
@@ -445,7 +485,7 @@ const visuals={};
 characters.forEach(c=>{visuals[c.visualProfileId]={id:c.visualProfileId,rigId:rig.id,bodyAssetId:asset(`${c.id}_body`),frontHandAssetId:asset(`${c.id}_hand`,{x:712,y:636}),anchors:rig.anchors,layerOrder:rig.layerOrder};});
 weapons.forEach(w=>asset(w.assetId,{x:712,y:636}));elements.forEach(e=>asset(e.assetId,{x:772,y:316}));asset('asset_star');[...races,...jobs].forEach(d=>asset(d.iconAssetId));asset('asset_background');
 // 블라인드: 목표 점수 하나. 속성은 런 시작 때 시드로 정한다. 몬스터 그림은 아직 없어 속성 아이콘으로 대신한다.
-const blinds=[130,550,1500,4500].map((target,i,a)=>({id:`blind_${i+1}`,target,boss:i===a.length-1}));
+const blinds=[120,550,1600,5000].map((target,i,a)=>({id:`blind_${i+1}`,target,boss:i===a.length-1}));
 // 일반 블라인드는 블라인드 속성의 몬스터, 보스 블라인드는 bossMonsterId. 보스 속성도 시드로 정한다.
 const monsters=[...elements.map(e=>({id:`monster_${e.id.slice(8)}`,elementId:e.id})),{id:'monster_boss',elementId:null}].map(m=>({...m,nameKey:m.id,assetId:asset(`asset_${m.id}`)}));
 const bossMonsterId='monster_boss';
@@ -1067,7 +1107,7 @@ function hintText(){
 }
 function handDock(){
  const b=state.battle,left=c.balance.attachLimit-b.actionsUsed,last=b.turn>=c.balance.turnsPerBlind;
- return `<footer class="dock"><div class="hand-head"><span class="hint ${selected?'card-tip':''}" id="hint">${hintText()}</span><span class="uses" aria-label="남은 붙이기 ${left}회">${Array.from({length:c.balance.attachLimit},(_,i)=>`<i class="${i<left?'on':''}"></i>`).join('')}</span></div>
+ return `<footer class="dock"><div class="hand-head"><span class="turn-chip ${last?'last':''}" aria-label="${b.turn}/${c.balance.turnsPerBlind}턴">${last?'마지막 턴':`${b.turn}<small>/${c.balance.turnsPerBlind}턴</small>`}</span><span class="hint ${selected?'card-tip':''}" id="hint">${hintText()}</span><span class="uses" aria-label="남은 붙이기 ${left}회">${Array.from({length:c.balance.attachLimit},(_,i)=>`<i class="${i<left?'on':''}"></i>`).join('')}</span></div>
  <div class="hand">${b.hand.length?b.hand.map((card,i,arr)=>handCard(card,i,arr.length,left<=0)).join(''):'<p class="empty">손패가 없어요</p>'}</div>
  <div class="actions"><button type="button" class="deck-mini" data-action="deck" aria-label="덱 보기"><b>${b.drawPile.length}</b><small>${uiIcon('cards')} 남은 덱</small></button><button type="button" class="go ${last?'fight':''}" data-action="end">${last?'전투!':'턴 종료'}</button></div></footer>`;
 }
@@ -1085,9 +1125,23 @@ function resolveDock(){
  return `<footer class="dock"><ul class="steps" id="steps">${stepItems(b.lastScore)}</ul><p class="skip-hint" id="skip-hint">화면을 누르면 바로 결과를 봐요</p><button type="button" class="go" data-action="finish" id="finish">${win&&!last?'보상 뽑기':'원정 결과'}</button></footer>`;
 }
 function renderBattle(){
- const b=state.battle;
- return stageTop(`<b>블라인드 ${b.blindIndex+1}</b><span class="turn">${b.turn}/${c.balance.turnsPerBlind}턴</span>`)+
- `<main class="battle">${blindZone()}${scoreBoard()}${playerZone()}${comboTray()}</main>${state.phase==='attach'?handDock():resolveDock()}`;
+ const b=state.battle;if(state.phase!=='attach')return renderArena();
+ return stageTop(`<b>블라인드 ${b.blindIndex+1}</b>`)+
+ `<main class="battle">${blindZone()}${scoreBoard()}${playerZone()}${comboTray()}</main>${handDock()}`;
+}
+const resultStamp=win=>`<div class="stamp ${win?'win':'lose'}" role="status">${win?'격파!':'패배'}</div>`;
+// 전투 페이지: 원정대가 몬스터를 공격한다. 점수 = 데미지, 목표 = 몬스터 HP.
+// live(방금 전투 시작)면 playResolve가 HP를 채운 상태부터 연출하고, 아니면 결과 상태로 바로 그린다.
+function renderArena(){
+ const b=state.battle,r=b.lastScore,m=monsterOf(b.monsterId),live=!!fx?.resolve,win=b.outcome==='win',hp=Math.max(0,b.target-r.score);
+ return stageTop(`<b>블라인드 ${b.blindIndex+1}</b><span class="turn">전투</span>`)+
+ `<main class="arena ${live?'enter':win?'won':'lost'}" id="arena">
+ <section class="foe-zone ${b.boss?'boss':''} ${!live&&win?'defeated':''}" id="blind-zone"><div class="blind-name"><strong>${nameOf(m.nameKey)}</strong>${b.boss?'<em class="boss-tag">보스</em>':''}${elementChip(b.elementId)}</div>
+ <div class="monster-slot" aria-hidden="true">${ic(m.assetId,'monster-art')}</div>
+ ${live?'':resultStamp(win)}<div class="hp" aria-label="몬스터 HP ${hp} / ${b.target}"><i id="hp" style="width:${live?100:hp/b.target*100}%"></i><span id="hp-text">HP ${live?b.target:hp} / ${b.target}</span></div></section>
+ ${scoreBoard()}
+ <div class="party arena-party">${members(state.run.team).map(u=>`<div class="punit static">${unitBadges(u,b)}<canvas data-render="${u.instanceId}"></canvas><span class="uname">${nameOf(u.characterDefId)}</span></div>`).join('')}</div>
+ </main>${resolveDock()}`;
 }
 
 /* ── 타이틀 ── */
@@ -1285,17 +1339,17 @@ async function playResolve(){
  const b=state.battle,r=b.lastScore,$=id=>document.getElementById(id);
  const pend=new Set(),token={skip:false,flush(){this.skip=true;pend.forEach(fn=>fn());pend.clear();}};resolveRun=token;
  const wait=ms=>token.skip||reduced?Promise.resolve():new Promise(res=>{const fin=()=>{clearTimeout(t);pend.delete(fin);res();},t=setTimeout(fin,ms);pend.add(fin);});
- const count=async(el,from,to,ms)=>{const n=8;for(let i=1;i<=n&&!token.skip;i++){el.textContent=number(Math.round(from+(to-from)*i/n));await wait(ms/n);}el.textContent=number(to);};
- const chipsEl=$('chips'),multEl=$('mult'),scoreEl=$('my-score'),verdict=$('verdict'),finish=$('finish'),gauge=$('gauge'),zone=$('blind-zone');
- if(!chipsEl||!finish){resolveRun=null;return;}
- chipsEl.textContent='0';multEl.textContent='1';scoreEl.textContent='?';verdict.textContent='계산 중';verdict.className='verdict';finish.classList.add('waiting');gauge.style.width='0%';
+ const count=async(el,from,to,ms,fmt=number)=>{const n=8;for(let i=1;i<=n&&!token.skip;i++){el.textContent=fmt(Math.round(from+(to-from)*i/n));await wait(ms/n);}el.textContent=fmt(to);};
+ const chipsEl=$('chips'),multEl=$('mult'),scoreEl=$('my-score'),verdict=$('verdict'),finish=$('finish'),zone=$('blind-zone'),arena=$('arena'),hpEl=$('hp'),hpText=$('hp-text');
+ if(!chipsEl||!finish||!arena||!hpEl){resolveRun=null;return;}
+ chipsEl.textContent='0';multEl.textContent='1';scoreEl.textContent='?';verdict.textContent='계산 중';verdict.className='verdict';finish.classList.add('waiting');
  const steps=[...app.querySelectorAll('#steps li:not(.off)')];steps.forEach(li=>li.classList.add('pending'));
  let chips=0,mult=1,bonus=0;
  await wait(250);
  for(const li of steps){
   if(token.skip)break;
   li.classList.remove('pending');li.classList.add('hit');
-  const origin=li.dataset.unit?app.querySelector(`canvas[data-render="${li.dataset.unit}"]`)?.closest('.punit'):app.querySelector(li.dataset.src==='tray'?'.tray':'.party');if(origin&&!reduced){origin.classList.add('fx-source');setTimeout(()=>origin.classList.remove('fx-source'),420);}
+  const origin=li.dataset.unit?app.querySelector(`canvas[data-render="${li.dataset.unit}"]`)?.closest('.punit'):app.querySelector(li.dataset.src==='tray'?'.duel':'.arena-party');if(origin&&!reduced){origin.classList.add('fx-source','charge');setTimeout(()=>origin.classList.remove('fx-source','charge'),450);}
   const add=Number(li.dataset.add||0),mul=Number(li.dataset.mul||1),bn=Number(li.dataset.bonus||0);
   if(add){await count(chipsEl,chips,chips+add,520);chips+=add;bump(chipsEl.parentElement);}
   if(mul!==1){mult*=mul;multEl.textContent=number(mult);bump(multEl.parentElement,true);if(!reduced&&mul>1){app.classList.remove('quake');void app.offsetWidth;app.classList.add('quake');}}
@@ -1306,12 +1360,22 @@ async function playResolve(){
  chipsEl.textContent=number(r.chips);multEl.textContent=number(r.multiplier);
  await wait(160);
  await count(scoreEl,0,r.score,520);scoreEl.textContent=r.score;scoreEl.classList.add('slam');if(r.multiplier>=2)$('duel').classList.add('blaze');
- gauge.style.width=Math.min(100,r.score/b.target*100)+'%';
  await wait(380);
- const win=b.outcome==='win';
+ // 공격: 원정대가 달려들고, 점수만큼 HP가 깎인다.
+ const units=[...app.querySelectorAll('.arena-party .punit')],win=b.outcome==='win',hp=Math.max(0,b.target-r.score);
+ if(!token.skip&&!reduced)units.forEach((u,i)=>setTimeout(()=>{u.classList.add('charge');setTimeout(()=>u.classList.remove('charge'),450);},i*90));
+ await wait(300);
+ if(!token.skip){zone.classList.remove('hit');void zone.offsetWidth;zone.classList.add('hit');floatText(zone,'-'+number(r.score),'down dmg');particles(zone.querySelector('.monster-slot'),'#fff3c4',12);}
+ hpEl.style.width=hp/b.target*100+'%';await count(hpText,b.target,hp,600,v=>`HP ${v} / ${b.target}`);hpText.textContent=`HP ${hp} / ${b.target}`;
+ await wait(250);
  verdict.textContent=win?`목표 달성 +${r.score-b.target}`:`목표까지 ${b.target-r.score}`;verdict.className='verdict '+(win?'good':'bad');
- if(zone){zone.classList.remove('hurt');void zone.offsetWidth;zone.classList.add(win?'defeated':'hurt');}
- if(!token.skip){particles(zone?.querySelector('.monster-slot'),win?'#f5c64b':'#ef6a5b',win?24:10);burst(win?'격파!':'목표 미달',!win);}
+ if(win){zone.classList.add('defeated');if(!token.skip)particles(zone.querySelector('.monster-slot'),'#f5c64b',26);}
+ else{
+  // 버틴 몬스터의 반격: 원정대가 쓰러진다.
+  if(!token.skip){zone.classList.add('counter');await wait(260);if(!reduced){const f=document.createElement('div');f.className='arena-flash';app.append(f);setTimeout(()=>f.remove(),500);app.classList.remove('quake');void app.offsetWidth;app.classList.add('quake');}}
+ }
+ zone.querySelector('.hp').insertAdjacentHTML('beforebegin',resultStamp(win));
+ arena.classList.remove('enter');arena.classList.add(win?'won':'lost');
  finish.classList.remove('waiting');$('skip-hint')?.remove();resolveRun=null;
 }
 

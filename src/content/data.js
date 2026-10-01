@@ -3,7 +3,7 @@ const {applyArt}=modules["src/content/art.mjs"];
 
 // 수치는 이 표에서만 수정한다. 데이터에는 화면 요소나 로직을 저장하지 않는다.
 // 레벨 효과는 모두 value + perLevel×(Lv−1) 형태다.
-const balance = Object.freeze({teamSize:3, blindCount:4, turnsPerBlind:6, handSize:5, attachLimit:3, basePower:5, weaponPower:5, weaponPlusPower:5, starPower:3, affinityPerLevel:0.25, comboBonusPerLevel:1, comboMultPerLevel:0.25});
+const balance = Object.freeze({teamSize:3, blindCount:4, turnsPerBlind:6, handSize:4, attachLimit:2, basePower:5, weaponPower:5, weaponPlusPower:5, starPower:3, affinityPerLevel:0.25, comboBonusPerLevel:1, comboMultPerLevel:0.25});
 const labels = {
   race_human:'인간', race_elf:'엘프', race_orc:'오크', race_dwarf:'드워프', job_warrior:'전사', job_archer:'궁수', job_mage:'마법사',
   weapon_sword:'검', weapon_bow:'활', weapon_staff:'지팡이', element_fire:'불', element_water:'물', element_lightning:'번개', sticker_star:'별',
@@ -57,7 +57,7 @@ const visuals={};
 characters.forEach(c=>{visuals[c.visualProfileId]={id:c.visualProfileId,rigId:rig.id,bodyAssetId:asset(`${c.id}_body`),frontHandAssetId:asset(`${c.id}_hand`,{x:712,y:636}),anchors:rig.anchors,layerOrder:rig.layerOrder};});
 weapons.forEach(w=>asset(w.assetId,{x:712,y:636}));elements.forEach(e=>asset(e.assetId,{x:772,y:316}));asset('asset_star');[...races,...jobs].forEach(d=>asset(d.iconAssetId));asset('asset_background');
 // 블라인드: 목표 점수 하나. 속성은 런 시작 때 시드로 정한다. 몬스터 그림은 아직 없어 속성 아이콘으로 대신한다.
-const blinds=[130,550,1500,4500].map((target,i,a)=>({id:`blind_${i+1}`,target,boss:i===a.length-1}));
+const blinds=[120,550,1600,5000].map((target,i,a)=>({id:`blind_${i+1}`,target,boss:i===a.length-1}));
 // 일반 블라인드는 블라인드 속성의 몬스터, 보스 블라인드는 bossMonsterId. 보스 속성도 시드로 정한다.
 const monsters=[...elements.map(e=>({id:`monster_${e.id.slice(8)}`,elementId:e.id})),{id:'monster_boss',elementId:null}].map(m=>({...m,nameKey:m.id,assetId:asset(`asset_${m.id}`)}));
 const bossMonsterId='monster_boss';

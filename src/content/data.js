@@ -68,7 +68,8 @@ Object.assign(labels,{monster_fire:'불꽃 슬라임',monster_water:'물결 슬�
 asset('asset_reward_back');
 applyArt(assets,visuals);
 // 캐릭터 카드: 블라인드별 확정 턴에는 손패 1장이 캐릭터 카드가 되고, 그 외 턴은 randomChance 확률.
-const characterRules={guaranteedTurns:[[1,2,3],[1],[1],[1]],randomChance:0.2};
+// 블라인드 1은 원정대를 채우도록 1-3턴 확정. 이후는 확정 없이 10%(교체로 T2·T3를 쉽게 맞추지 못하게 공급을 줄임).
+const characterRules={guaranteedTurns:[[1,2,3],[],[],[]],randomChance:0.1};
 // 상성: 키가 값을 이긴다. 캐릭터마다 유리 ×(1+k·Lv), 불리 ÷(1+k·Lv), k=affinityPerLevel.
 const affinity={beats:{element_fire:'element_lightning',element_lightning:'element_water',element_water:'element_fire'}};
 // 블라인드 사이 보상: 앞면 3장 공개 → 뒤집어 섞기 → 1장 선택. 후보는 보유한 레시피 각각과 족보 종류 3개.

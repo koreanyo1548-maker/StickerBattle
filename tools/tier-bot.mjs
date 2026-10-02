@@ -88,7 +88,7 @@ for (const [name, policy] of Object.entries(policies).filter(([k]) => !only || o
     const r = playRun(policy, seed);
     r.scores.forEach((v, k) => scores[k].push(v));
     let ok = true; targets.forEach((t, k) => { ok = ok && r.scores[k] >= t; if (ok) clear[k]++; });
-    const sn = r.snap; if (sn.t1 === 3) t1Full++;
+    const sn = r.snap ?? { t1: 0, t2: null, t3: null, t4: [] }; if (sn.t1 === 3) t1Full++;
     if (sn.t2) t2[sn.t2] = (t2[sn.t2] ?? 0) + 1; if (sn.t3) t3[sn.t3] = (t3[sn.t3] ?? 0) + 1;
     sn.t4.forEach(id => { t4[id] = (t4[id] ?? 0) + 1; });
   }

@@ -7,7 +7,7 @@ const { data, rules, game } = loadModules();
 
 function bestAction(s, c) {
   const b = s.battle, chars = s.run.team.characters;
-  if (b.actionsUsed >= c.balance.attachLimit) return null;
+  if (b.actionsUsed >= game.attachLimitFor(s, c)) return null;
   let best = null, bestScore = -1;
   for (const card of b.hand) for (let slot = 0; slot < c.balance.teamSize; slot++) {
     const cmd = card.characterDefId ? { type: 'PlaceCharacter', cardInstanceId: card.instanceId, targetSlot: slot }

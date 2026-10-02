@@ -7,128 +7,153 @@ import { playRun } from './balance-bot.mjs';
 const { data, rules, game } = loadModules();
 const c = data.content;
 const sticker = id => data.byId(c.stickers, `sticker_${id}`);
-// 캐릭터 정의 ID와 장비로 유닛을 만든다. 예: unit(0, 'human_warrior', {weaponId:'weapon_sword'})
-const unit = (slot, def, extra = {}) => ({ ...rules.makeUnit(`u${slot}`, `char_${def}`), ...extra });
-const card = (id, mod = null) => ({ uid: `k_${id}_${Math.random()}`, defId: `sticker_${id}`, mod });
-// plays: [[스티커, 대상 자리, 각인?], ...]
-function attack(team, plays, { elementId = null, effect = null, silencedSlot = null, levels = {}, discardsLeft = 0, lastAttack = false } = {}) {
-  return rules.scoreAttack({ team, plays: plays.map(([id, slot, mod]) => ({ card: card(id, mod), targetInstanceId: team[slot].instanceId })), levels, blind: { elementId, effect, silencedSlot }, discardsLeft, lastAttack }, c);
-}
-const hand = (ids, opts) => rules.evaluateHand(ids.map(id => `sticker_${id}`), {}, c, opts).handId;
-const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} != ${b}`);
+let serial = 0;
+// 캐릭터 정의 ID(종족_직업)와 장비로 유닛을 만든다. 예: mk('human_warrior', {level:3, weaponId:'weapon_sword'})
+const mk = (def, extra = {}) => { const u = { ...rules.makeUnit(`u${serial++}`, `char_${def}`, c), ...extra }; u.hp = extra.hp ?? rules.maxHpOf(u, c); return u; };
+const monster = (hp = 400, atk = 40, elementId = 'element_water') => ({ hp, maxHp: hp, atk, elementId });
+const near = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} != ${b}`);
+const round1 = (team, m = monster(), round = 1) => rules.resolveRound(team, m, round, c);
 
 test('콘텐츠 검증', () => assert.equal(data.validateContent(), true));
 
-test('붙이기: 별과 속성은 레벨, 다른 속성은 교체 후 Lv1, 같은 무기는 강화·다른 무기는 교체 후 +0', () => {
-  let u = unit(0, 'human_warrior');
-  u = rules.attachUnit(u, sticker('star')); u = rules.attachUnit(u, sticker('star'));
-  u = rules.attachUnit(u, sticker('fire')); u = rules.attachUnit(u, sticker('fire'));
-  assert.deepEqual([u.starLevel, u.elementId, u.elementLevel], [2, 'element_fire', 2]);
-  u = rules.attachUnit(u, sticker('water'));
-  assert.deepEqual([u.elementId, u.elementLevel], ['element_water', 1]);
-  u = rules.attachUnit(u, sticker('sword')); u = rules.attachUnit(u, sticker('sword'));
+test('레벨: 체력과 공격에 1.3^(Lv-1)을 곱하고, 별을 붙이면 늘어난 체력만큼 회복한다', () => {
+  let u = mk('human_warrior');
+  assert.deepEqual([u.level, u.hp, rules.maxHpOf(u, c)], [1, 120, 120]);
+  u = { ...u, hp: 50 };
+  u = rules.attachUnit(u, sticker('star'), c);
+  assert.deepEqual([u.level, rules.maxHpOf(u, c), u.hp], [2, 156, 86]);
+  near(rules.levelMult(10, c), 1.3 ** 9);
+  assert.equal(rules.attachmentReason(mk('human_warrior', { level: 10 }), sticker('star'), c), 'maxLevel');
+});
+
+test('붙이기: 같은 무기는 강화, 다른 무기는 교체, 같은 속성은 불가, 다른 속성은 교체', () => {
+  let u = mk('human_warrior');
+  u = rules.attachUnit(u, sticker('sword'), c); u = rules.attachUnit(u, sticker('sword'), c);
   assert.deepEqual([u.weaponId, u.weaponPlus], ['weapon_sword', 1]);
-  u = rules.attachUnit(u, sticker('bow'));
+  u = rules.attachUnit(u, sticker('bow'), c);
   assert.deepEqual([u.weaponId, u.weaponPlus], ['weapon_bow', 0]);
+  u = rules.attachUnit(u, sticker('fire'), c);
+  assert.equal(rules.attachmentReason(u, sticker('fire'), c), 'same');
+  assert.equal(rules.attachmentReason(u, sticker('water'), c), null);
+  assert.equal(rules.attachUnit(u, sticker('water'), c).elementId, 'element_water');
 });
 
-test('족보: 우선순위는 확률의 역순, 레벨은 칩·배율을 올린다', () => {
-  assert.equal(hand(['sword']), 'single');
-  assert.equal(hand(['sword', 'sword', 'fire']), 'pair');
-  assert.equal(hand(['sword', 'sword', 'fire', 'fire']), 'twoPair');
-  assert.equal(hand(['fire', 'water', 'lightning', 'sword', 'sword']), 'triElement');
-  assert.equal(hand(['sword', 'bow', 'staff', 'star']), 'triWeapon');
-  // 트리플이 삼원소보다 위
-  assert.equal(hand(['fire', 'fire', 'fire', 'water', 'lightning']), 'triple');
-  assert.equal(hand(['star', 'star', 'star', 'bow', 'bow']), 'fullHouse');
-  assert.equal(hand(['bow', 'bow', 'bow', 'bow', 'fire']), 'four');
-  assert.equal(hand(['bow', 'bow', 'bow', 'bow', 'bow']), 'five');
-  // 무지개 활: 속성을 모두 같은 스티커로(삼원소 대신 풀하우스)
-  assert.equal(hand(['fire', 'water', 'lightning', 'sword', 'sword'], { elementsSame: true }), 'fullHouse');
-  const lv = rules.evaluateHand(['sticker_sword', 'sticker_sword'], { pair: 3 }, c);
-  assert.deepEqual([lv.level, lv.chips, lv.mult], [3, 40, 4]);
-  const flat = rules.evaluateHand(['sticker_sword', 'sticker_sword'], { pair: 3 }, c, { flat: true });
-  assert.deepEqual([flat.level, flat.chips, flat.mult], [1, 10, 2]);
+test('스킬: 무기+속성으로 생기고, 스킬이 바뀌면 쿨타임이 0이 된다', () => {
+  let u = mk('human_warrior', { weaponId: 'weapon_sword', elementId: 'element_fire' });
+  assert.equal(rules.skillOf(u, c).name, '화염검');
+  u = { ...u, skillCd: 2 };
+  assert.equal(rules.attachUnit(u, sticker('fire'), c) === u, false);
+  const changed = rules.attachUnit(u, sticker('water'), c);
+  assert.deepEqual([rules.skillOf(changed, c).name, changed.skillCd], ['역류검', 0]);
+  const kept = rules.attachUnit(u, sticker('star'), c);
+  assert.equal(kept.skillCd, 2);
+  assert.equal(c.skills.length, 9);
+  for (const e of c.elements) assert.equal(c.skills.filter(s => s.elementId === e.id && s.kind === 'active').length, 1);
 });
 
-test('공격 점수: 손으로 계산한 예제와 일치', () => {
-  // 0번 인간 궁수(페어 이상 +4 배율), 1번 엘프 마법사(속성 1장당 ×1.15). 블라인드 물: 번개 유리, 불 불리.
-  const t = [unit(0, 'human_archer'), unit(1, 'elf_mage')];
-  const r = attack(t, [['sword', 0], ['sword', 0], ['lightning', 1], ['fire', 1]], { elementId: 'element_water' });
-  // 페어 10×2 → 검 +10 → 검(강화 +1) +15 → 번개 Lv1 유리 +5 칩 +2 배율 → 불 Lv1(번개 교체) 불리 +5 칩 → 칩 45, 배율 4
-  // 인간 궁수 +4 → 8, 엘프 마법사 속성 2장 ×1.15² → 10.58. floor(45 × 10.58) = 476
-  assert.equal(r.handId, 'pair');
-  assert.equal(r.chips, 45); near(r.mult, 8 * 1.15 ** 2); assert.equal(r.score, 476);
-  assert.deepEqual([r.team[0].weaponPlus, r.team[1].elementId, r.team[1].elementLevel], [1, 'element_fire', 1]);
-  assert.deepEqual(r.steps.map(s => s.src), ['hand', 'card', 'card', 'card', 'card', 'unit', 'unit']);
+test('상성: 이기면 ×1.5, 지면 ÷1.5, 양방향', () => {
+  const r = rules.relationMult;
+  near(r('element_fire', 'element_lightning', c), 1.5); near(r('element_lightning', 'element_fire', c), 1 / 1.5);
+  near(r('element_water', 'element_fire', c), 1.5); near(r('element_fire', null, c), 1); near(r('element_fire', 'element_fire', c), 1);
 });
 
-test('점수 순서: 같은 점수 재료라도 자리 순서(+배율 → ×배율)가 결과를 바꾼다', () => {
-  const plays = [['fire', 0], ['fire', 1]];
-  const ab = attack([unit(0, 'elf_archer'), unit(1, 'elf_mage')], plays), ba = attack([unit(0, 'elf_mage'), unit(1, 'elf_archer')], plays);
-  // 페어 10×2, 불 두 장(두 번째도 Lv1: 다른 캐릭터) 칩 20 배율 4. 궁수 +2×2, 마법사 ×1.15².
-  near(ab.mult, (4 + 4) * 1.15 ** 2); near(ba.mult, 4 * 1.15 ** 2 + 4);
-  assert.ok(ab.score > ba.score);
+test('적성: 어울리는 무기가 아니면 0.5, 무지개 활은 1, 축적 지팡이가 있으면 원정대 전체 0.75', () => {
+  const warriorBow = mk('human_warrior', { weaponId: 'weapon_bow' });
+  assert.equal(rules.fitOf(mk('human_warrior', { weaponId: 'weapon_sword' }), [], c), 1);
+  assert.equal(rules.fitOf(mk('human_warrior'), [], c), 1);
+  assert.equal(rules.fitOf(warriorBow, [warriorBow], c), 0.5);
+  const rainbow = mk('human_warrior', { weaponId: 'weapon_bow', elementId: 'element_water' });
+  assert.equal(rules.fitOf(rainbow, [rainbow], c), 1);
+  const charger = mk('human_mage', { weaponId: 'weapon_staff', elementId: 'element_lightning' });
+  assert.equal(rules.fitOf(warriorBow, [warriorBow, charger], c), 0.75);
+  assert.equal(rules.fitOf(warriorBow, [warriorBow, { ...charger, hp: 0 }], c), 0.5);
+  // 불일치 반감은 공격(스킬 피해 포함)에 모두 걸린다
+  const m = monster(1000, 1, null), a = mk('human_warrior', { weaponId: 'weapon_bow' }), b = mk('human_archer', { weaponId: 'weapon_bow' });
+  near(rules.attackOf(a, [a], m, 1, c) / rules.attackOf(b, [b], m, 1, c), (10 * 0.5) / 15);
 });
 
-test('드워프: 성장치 G = 강화 + 별 Lv + 속성 Lv', () => {
-  const t = [unit(0, 'dwarf_mage', { weaponId: 'weapon_staff', weaponPlus: 1, starLevel: 3 })];
-  const r = attack(t, [['staff', 0]]);
-  // 지팡이 강화 +2가 되어 G = 2 + 3 + 0 = 5 → ×1.5. 낱장 5×1, 지팡이 칩 10+10.
-  assert.equal(r.chips, 25); near(r.mult, 1.5); assert.equal(r.score, 37);
+test('한 라운드: 예시 전투 (스킬 두 개가 터지고, 맨 뒤 동료가 맞는다)', () => {
+  const archer = mk('elf_archer', { level: 3, weaponId: 'weapon_bow', elementId: 'element_lightning' });
+  const warrior = mk('human_warrior', { level: 2, weaponId: 'weapon_sword', elementId: 'element_fire' });
+  const mage = mk('orc_mage', { weaponId: 'weapon_staff' });
+  assert.equal(archer.hp, 135);
+  const r = round1([archer, warrior, mage]);
+  const attacks = r.events.filter(e => e.type === 'attack');
+  assert.deepEqual(attacks.map(e => [e.slot, e.skillId, e.hits]), [[0, 'skill_chain_bow', [55, 55, 55]], [1, 'skill_flame_sword', [31]], [2, null, [14]]]);
+  assert.equal(r.monster.hp, 400 - 210);
+  const counter = r.events.find(e => e.type === 'counter');
+  assert.deepEqual([counter.slot, counter.dmg, counter.hp, counter.killed], [2, 40, 30, false]);
+  assert.deepEqual(r.team.map(u => u.skillCd), [3, 3, 0]);
+  // 라운드 2: 마법사가 위험하니 2번과 3번을 맞바꾼다. 스킬은 쿨타임이라 기본 공격이고, 이번엔 전사가 맞는다(불이 물에 져서 ×1.5).
+  const swapped = [r.team[0], r.team[2], r.team[1]];
+  const r2 = round1(swapped, r.monster, 2);
+  assert.deepEqual(r2.events.filter(e => e.type === 'attack').map(e => [e.skillId, e.total]), [[null, 46], [null, 14], [null, 10]]);
+  assert.deepEqual(r2.team.map(u => u.skillCd), [2, 0, 2]);
+  const c2 = r2.events.find(e => e.type === 'counter');
+  assert.deepEqual([c2.slot, c2.dmg, c2.hp], [2, 60, 96]);
 });
 
-test('조합 무기 능력', () => {
-  // 화염검: 자기 기본 능력 한 번 더
-  const flame = attack([unit(0, 'orc_warrior', { weaponId: 'weapon_sword', elementId: 'element_fire', elementLevel: 1 })], [['sword', 0]]);
-  assert.equal(flame.chips, 5 + 15 + 15 + 15);
-  // 연쇄궁: 왼쪽 캐릭터 기본 능력 한 번 더
-  const chain = attack([unit(0, 'human_warrior'), unit(1, 'elf_archer', { weaponId: 'weapon_bow', elementId: 'element_lightning', elementLevel: 1 })], [['star', 0], ['star', 0]]);
-  assert.equal(chain.chips, 10 + 5 + 10 + 30 + 30); assert.equal(chain.score, 170);
-  // 폭발궁: 오른쪽 캐릭터 기본 능력 한 번 더(오른쪽이 발동하기 전에)
-  const blast = attack([unit(0, 'human_mage', { weaponId: 'weapon_bow', elementId: 'element_fire', elementLevel: 1 }), unit(1, 'orc_warrior')], [['sword', 1]]);
-  assert.equal(blast.chips, 5 + 10 + 15 + 15);
-  // 역류검: 남은 버리기 1회당 +20 칩
-  const reflux = attack([unit(0, 'human_mage', { weaponId: 'weapon_sword', elementId: 'element_water', elementLevel: 1 })], [['star', 0]], { discardsLeft: 3 });
-  assert.equal(reflux.chips, 5 + 5 + 60);
-  // 연마검: 공격할 때마다 강화 +1(다음 공격부터 효과)
-  const hone = attack([unit(0, 'human_mage', { weaponId: 'weapon_sword', elementId: 'element_lightning', elementLevel: 1 })], [['star', 0]]);
-  assert.equal(hone.team[0].weaponPlus, 1);
-  // 축적 지팡이: 누적 +1씩, 누적만큼 +배율
-  let t = [unit(0, 'human_mage', { weaponId: 'weapon_staff', elementId: 'element_lightning', elementLevel: 1 })];
-  const c1 = attack(t, [['star', 0]]); assert.deepEqual([c1.mult, c1.team[0].charge], [2, 1]);
-  const c2 = attack(c1.team, [['star', 0]]); assert.deepEqual([c2.mult, c2.team[0].charge], [3, 2]);
-  // 화염 지팡이: 마지막 공격이면 ×3
-  const fs = [unit(0, 'human_mage', { weaponId: 'weapon_staff', elementId: 'element_fire', elementLevel: 1 })];
-  assert.equal(attack(fs, [['star', 0]], { lastAttack: true }).mult, 3);
-  assert.equal(attack(fs, [['star', 0]]).mult, 1);
-  // 균형 지팡이: 모두 다른 종류면 ×2
-  const bs = [unit(0, 'elf_mage', { weaponId: 'weapon_staff', elementId: 'element_water', elementLevel: 1 }), unit(1, 'human_warrior')];
-  assert.equal(attack(bs, [['sword', 1], ['bow', 1]]).mult, 2);
-  assert.equal(attack(bs, [['sword', 1], ['bow', 1], ['bow', 1]]).mult, 2);
-  // 무지개 활: 속성을 모두 같은 스티커로
-  const rb = [unit(0, 'human_mage', { weaponId: 'weapon_bow', elementId: 'element_water', elementLevel: 1 }), unit(1, 'human_warrior')];
-  assert.equal(attack(rb, [['fire', 1], ['water', 1], ['lightning', 1], ['sword', 1], ['sword', 1]]).handId, 'fullHouse');
+test('쿨타임: 3라운드 쉬고 4번째 라운드에 다시 쓴다', () => {
+  let team = [mk('human_warrior', { weaponId: 'weapon_sword', elementId: 'element_fire' })], m = monster(1e6, 1, null);
+  const used = [];
+  for (let t = 1; t <= 5; t++) { const r = round1(team, m, t); used.push(r.events.find(e => e.type === 'attack').skillId !== null); team = r.team; m = r.monster; }
+  assert.deepEqual(used, [true, false, false, false, true]);
 });
 
-test('각인: 반짝이 +30 칩, 홀로 +5 배율, 금박 ×1.5, 유리 ×2', () => {
-  const t = [unit(0, 'human_mage')];
-  const r = attack(t, [['star', 0, 'shiny'], ['bow', 0, 'holo'], ['sword', 0, 'gold'], ['staff', 0, 'glass']]);
-  // 삼무기 30×3, 별 +5, 반짝이 +30, 활 +10, 홀로 +5, 검 +10, 금박 ×1.5, 지팡이 +10, 유리 ×2
-  assert.equal(r.handId, 'triWeapon'); assert.equal(r.chips, 30 + 5 + 30 + 10 + 10 + 10); near(r.mult, (3 + 5) * 1.5 * 2);
+test('균형 지팡이: 다친 동료가 있을 때만 발동하고, 그때부터 쿨타임이 시작된다', () => {
+  const mage = mk('human_mage', { weaponId: 'weapon_staff', elementId: 'element_water' });
+  const warrior = mk('human_warrior', { hp: 30 });
+  const full = round1([mage, mk('human_warrior')], monster(1000, 1, null));
+  assert.equal(full.events.some(e => e.type === 'heal'), false); assert.equal(full.team[0].skillCd, 0);
+  const r = round1([mage, warrior], monster(1000, 1, null));
+  const heal = r.events.find(e => e.type === 'heal');
+  assert.deepEqual([heal.slot, heal.target, heal.amount, heal.hp], [0, 1, 48, 78]);
+  assert.equal(r.team[0].skillCd, 3);
+  // 적성이 맞지 않으면(마법사가 검을 든 경우가 아니라) 전사가 지팡이를 들면 회복량이 절반
+  const warriorMage = mk('human_warrior', { weaponId: 'weapon_staff', elementId: 'element_water' });
+  const r2 = round1([warriorMage, mk('human_archer', { hp: 10 })], monster(1000, 1, null));
+  assert.equal(r2.events.find(e => e.type === 'heal').amount, 16);
 });
 
-test('보스 규칙', () => {
-  const t = [unit(0, 'human_archer'), unit(1, 'orc_warrior')];
-  assert.equal(attack(t, [['sword', 1]], { effect: 'weaponSeal' }).steps.find(s => s.src === 'card').chips, 0);
-  assert.equal(attack(t, [['fire', 1]], { effect: 'elementSeal', elementId: 'element_lightning' }).mult, 1);
-  assert.equal(attack(t, [['star', 1]], { effect: 'starSeal' }).chips, 5);
-  assert.equal(attack(t, [['sword', 0], ['sword', 0]], { effect: 'flatHands', levels: { pair: 4 } }).level, 1);
-  // 침묵: 1번 캐릭터 능력 정지
-  assert.equal(attack(t, [['sword', 1]], { effect: 'silence', silencedSlot: 1 }).chips, 5 + 10);
-  // 상성 반전: 블라인드 물에서 번개는 원래 유리, 반전되면 불리(배율 0)
-  assert.equal(attack(t, [['lightning', 1]], { elementId: 'element_water', effect: 'invertAffinity' }).mult, 1);
-  assert.equal(attack(t, [['lightning', 1]], { elementId: 'element_water' }).mult, 3);
+test('패시브: 역류검 · 폭발궁 · 연마검 · 화염 지팡이', () => {
+  // 역류검: 받는 피해 -25%, 불일치면 절반(-12.5%)
+  const tank = mk('human_warrior', { weaponId: 'weapon_sword', elementId: 'element_water' });
+  assert.equal(round1([tank], monster(1e6, 100, null)).events.find(e => e.type === 'counter').dmg, 75);
+  const archerSword = mk('human_archer', { weaponId: 'weapon_sword', elementId: 'element_water' });
+  assert.equal(round1([archerSword], monster(1e6, 100, null)).events.find(e => e.type === 'counter').dmg, 88);
+  // 폭발궁: 몬스터 체력이 절반 이하일 때 공격 +40%
+  const blast = mk('human_archer', { weaponId: 'weapon_bow', elementId: 'element_fire' });
+  near(rules.attackOf(blast, [blast], { hp: 50, maxHp: 100, atk: 1, elementId: null }, 1, c) / rules.attackOf(blast, [blast], { hp: 51, maxHp: 100, atk: 1, elementId: null }, 1, c), 1.4);
+  // 연마검: 라운드마다 +5%, 최대 +50%
+  const hone = mk('human_warrior', { weaponId: 'weapon_sword', elementId: 'element_lightning' }), m = monster(100, 1, null);
+  const at = r => rules.attackOf(hone, [hone], m, r, c), base = at(1);
+  near(at(3) / base, 1.1); near(at(50) / base, 1.5);
+  // 화염 지팡이: 원정대 전체 공격 +10%
+  const staff = mk('human_mage', { weaponId: 'weapon_staff', elementId: 'element_fire' }), ally = mk('human_warrior');
+  near(rules.attackOf(ally, [ally, staff], m, 1, c) / rules.attackOf(ally, [ally], m, 1, c), 1.1);
+});
+
+test('죽음: 맨 뒤 살아 있는 동료부터 맞고, 쓰러지면 칸이 비고 스티커도 사라진다', () => {
+  const front = mk('human_warrior', { hp: 5, weaponId: 'weapon_sword' }), back = mk('human_archer', { hp: 5, weaponId: 'weapon_bow', elementId: 'element_fire', level: 4 });
+  let r = round1([front, null, back], monster(1e6, 10, null));
+  const c1 = r.events.find(e => e.type === 'counter');
+  assert.deepEqual([c1.slot, c1.killed], [2, true]); assert.equal(r.team[2], null);
+  assert.equal(r.lost, false);
+  r = round1(r.team, r.monster, 2);
+  assert.deepEqual([r.events.find(e => e.type === 'counter').slot, r.lost], [0, true]);
+  assert.ok(r.events.some(e => e.type === 'partyDown'));
+  // 몬스터가 먼저 쓰러지면 반격이 없다
+  const strong = mk('human_archer', { level: 10 });
+  const win = round1([strong], monster(10, 999, null));
+  assert.equal(win.won, true); assert.equal(win.events.some(e => e.type === 'counter'), false);
+});
+
+test('예상 표시와 실제 전투는 같은 함수', () => {
+  const g = start(3);
+  const f = game.forecastRound(g.s, c);
+  const before = g.s.battle.monster.hp;
+  g.run('Fight');
+  assert.equal(g.s.battle.monster.hp, f.monster.hp); assert.ok(f.monster.hp < before);
 });
 
 // ── 게임 흐름 ──
@@ -138,101 +163,105 @@ function runner(seed = 7) {
   run('StartRun', { seed });
   return { run, get s() { return s; }, set s(v) { s = v; } };
 }
+function start(seed = 7, position = 0) {
+  const g = runner(seed); g.run('ShuffleStarter'); g.run('PickStarter', { position }); g.run('BeginJourney'); g.run('SelectBlind'); return g;
+}
 
-test('흐름: 시작 캐릭터 → 블라인드 → 공격·버리기 검증', () => {
+test('시작 동료: 무작위 3명을 보여 주고 섞은 뒤 고른다. 섞는 순서는 엔진이 정한다', () => {
   const g = runner();
-  assert.equal(g.s.phase, 'starter'); assert.equal(g.s.starter.length, 3);
-  g.run('PickStarter', { index: 1 });
-  assert.equal(g.s.phase, 'blind_select'); assert.equal(g.s.run.team.characters.filter(Boolean).length, 1);
-  assert.equal(g.run('SelectBlind').error, null);
-  const b = g.s.battle, u = g.s.run.team.characters[0].instanceId;
-  assert.deepEqual([b.hand.length, b.attacksLeft, b.discardsLeft, b.target], [c.balance.handSize, c.balance.attacks, c.balance.discards, c.anteBase[0]]);
-  assert.equal(g.run('Attack', { plays: [] }).error, 'empty');
-  assert.equal(g.run('Attack', { plays: b.hand.slice(0, 6).map(x => ({ uid: x.uid, targetInstanceId: u })) }).error, 'tooMany');
-  assert.equal(g.run('Attack', { plays: [{ uid: b.hand[0].uid, targetInstanceId: 'nobody' }] }).error, 'target');
-  const drawBefore = b.drawPile.length;
-  assert.equal(g.run('Discard', { uids: [b.hand[0].uid, b.hand[1].uid] }).error, null);
-  assert.deepEqual([g.s.battle.discardsLeft, g.s.battle.hand.length, g.s.battle.drawPile.length], [c.balance.discards - 1, c.balance.handSize, drawBefore - 2]);
-  const plays = g.s.battle.hand.slice(0, 3).map(x => ({ uid: x.uid, targetInstanceId: u }));
-  const expected = game.previewAttack(g.s, plays, c).score;
-  assert.equal(g.run('Attack', { plays }).error, null);
-  assert.deepEqual([g.s.battle.damage, g.s.battle.attacksLeft, g.s.battle.hand.length], [expected, c.balance.attacks - 1, c.balance.handSize]);
+  assert.equal(g.s.phase, 'starter_reveal');
+  assert.equal(g.s.starter.options.length, 3); assert.equal(new Set(g.s.starter.options).size, 3);
+  assert.equal(g.run('PickStarter', { position: 0 }).error, 'phase');
+  g.run('ShuffleStarter');
+  assert.equal(g.s.phase, 'starter_pick');
+  assert.equal(g.s.starter.swaps.length, c.starterRules.swaps);
+  // swaps를 순서대로 적용한 결과가 order와 같다
+  const order = [0, 1, 2]; for (const [i, j] of g.s.starter.swaps) [order[i], order[j]] = [order[j], order[i]];
+  assert.deepEqual(order, g.s.starter.order);
+  const want = g.s.starter.options[g.s.starter.order[2]];
+  g.run('PickStarter', { position: 2 });
+  assert.equal(g.s.phase, 'starter_done'); assert.equal(g.s.run.team.characters[0].characterDefId, want);
+  g.run('BeginJourney'); assert.equal(g.s.phase, 'blind_select');
+  // 같은 시드면 같은 3명과 같은 섞기
+  const h = runner(); h.run('ShuffleStarter'); assert.deepEqual(h.s.starter, (() => { const k = runner(); k.run('ShuffleStarter'); return k.s.starter; })());
 });
 
-test('흐름: 승리 정산(남은 공격·이자) → 상점 → 다음 블라인드', () => {
-  const g = runner(); g.run('PickStarter', { index: 0 }); g.run('SelectBlind');
-  const s = structuredClone(g.s); s.battle.target = 1; s.run.gold = 12; g.s = s;
+test('전투 턴: 손패 4장, 붙이기 2번, 자리 바꾸기 1번, 전투 뒤 다음 턴에 새 손패', () => {
+  const g = start();
+  let b = g.s.battle;
+  assert.deepEqual([b.hand.length, b.attachesLeft, b.swapsLeft, b.turn], [4, 2, 1, 1]);
   const u = g.s.run.team.characters[0].instanceId;
-  g.run('Attack', { plays: [{ uid: g.s.battle.hand[0].uid, targetInstanceId: u }] });
+  // 붙일 수 없는 카드: 같은 속성 두 번
+  const [x, y, z] = b.hand;
+  assert.equal(g.run('Attach', { uid: 'nope', targetInstanceId: u }).error, 'card');
+  assert.equal(g.run('Attach', { uid: x.uid, targetInstanceId: 'nobody' }).error, 'target');
+  g.run('Attach', { uid: x.uid, targetInstanceId: u });
+  const ok = g.s.battle.hand.find(k => !game.validateAttach(g.s, { uid: k.uid, targetInstanceId: u }, c));
+  g.run('Attach', { uid: ok.uid, targetInstanceId: u });
+  assert.equal(g.s.battle.attachesLeft, 0);
+  assert.equal(g.run('Attach', { uid: g.s.battle.hand[0].uid, targetInstanceId: u }).error, 'limit');
+  assert.equal(g.run('SwapSlots', { a: 0, b: 1 }).error, null); assert.equal(g.s.battle.swapsLeft, 0);
+  assert.equal(g.run('SwapSlots', { a: 0, b: 1 }).error, 'swapLimit');
+  g.run('Fight');
+  b = g.s.battle;
+  assert.deepEqual([b.turn, b.hand.length, b.attachesLeft, b.swapsLeft, g.s.phase], [2, 4, 2, 1, 'battle']);
+  assert.ok(b.lastRound.events.length > 0);
+  assert.equal(b.drawPile.length + b.discardPile.length + b.hand.length, g.s.run.deck.length);
+});
+
+test('승리: 골드 정산(보상 + 빨리 끝냄 + 이자) → 상점 → 다음 블라인드', () => {
+  const g = start();
+  const s = structuredClone(g.s); s.battle.monster.hp = 1; s.run.gold = 12; g.s = s;
+  g.run('Fight');
   assert.equal(g.s.phase, 'cashout');
-  // 스몰 3 + 남은 공격 3 × 1 + 이자 floor(12/5)=2
-  assert.deepEqual(g.s.battle.cashout, { blindGold: 3, attackGold: 3, interest: 2, total: 8 });
+  assert.deepEqual(g.s.battle.cashout, { blindGold: 4, speedGold: 2, interest: 2, total: 8 });
   g.run('CashOut');
-  assert.equal(g.s.phase, 'shop'); assert.equal(g.s.run.gold, 20); assert.equal(g.s.run.blindIndex, 1);
-  // 리롤 비용 5 → 6
-  assert.equal(game.rerollCost(g.s, c), 5); g.run('Reroll'); assert.equal(game.rerollCost(g.s, c), 6); assert.equal(g.s.run.gold, 15);
-  // 칸 확장
-  assert.equal(g.run('BuySlot').error, null); assert.equal(g.s.run.team.characters.length, 4); assert.equal(g.s.run.gold, 5);
-  // 캐릭터 구매: 골드가 모자라면 실패, 충분하면 빈 칸에
-  const s2 = structuredClone(g.s); s2.run.gold = 50; g.s = s2;
-  assert.equal(g.run('BuyCharacter', { index: 0 }).error, null); assert.equal(g.s.run.team.characters.filter(Boolean).length, 2);
-  // 자리 바꾸기와 판매(마지막 1명은 팔 수 없음)
-  const first = g.s.run.team.characters[0].instanceId;
-  g.run('MoveCharacter', { from: 0, to: 3 }); assert.equal(g.s.run.team.characters[3].instanceId, first);
-  const gold = g.s.run.gold; assert.equal(g.run('SellCharacter', { slot: 3 }).error, null); assert.ok(g.s.run.gold > gold);
-  assert.equal(g.run('SellCharacter', { slot: 1 }).error, 'lastCharacter');
+  assert.equal(g.s.phase, 'shop'); assert.equal(g.s.run.gold, 20); assert.deepEqual([g.s.run.ante, g.s.run.blindIndex], [0, 1]);
+  assert.equal(g.s.shop.recruits.length, 2);
   g.run('LeaveShop'); assert.equal(g.s.phase, 'blind_select');
-  assert.equal(game.blindInfo(g.s.run, c).kind.id, 'big');
+  g.run('SelectBlind'); assert.equal(game.blindInfo(g.s.run, c).kind.id, 'big');
+  assert.equal(g.s.battle.monster.hp, c.monsterStats[1][0]);
 });
 
-test('흐름: 덱 편집 물건은 카드를 고른 뒤에 골드를 낸다', () => {
-  const g = runner(); g.run('PickStarter', { index: 0 }); g.run('SelectBlind');
-  const s = structuredClone(g.s); s.battle.target = 1; g.s = s;
-  g.run('Attack', { plays: [{ uid: g.s.battle.hand[0].uid, targetInstanceId: g.s.run.team.characters[0].instanceId }] }); g.run('CashOut');
-  const s2 = structuredClone(g.s); s2.run.gold = 30; s2.shop.items = [{ itemId: 'item_holo', cost: 4, sold: false }, { itemId: 'item_remove', cost: 3, sold: false }]; g.s = s2;
-  g.run('BuyItem', { index: 0 }); assert.equal(g.s.phase, 'deck_pick'); assert.equal(g.s.run.gold, 30);
-  g.run('CancelPick'); assert.equal(g.s.phase, 'shop'); assert.equal(g.s.run.gold, 30);
-  g.run('BuyItem', { index: 0 });
-  const uids = g.s.run.deck.slice(0, 2).map(x => x.uid);
-  assert.equal(g.run('PickDeckCards', { uids: [...uids, g.s.run.deck[2].uid] }).error, 'card');
-  g.run('PickDeckCards', { uids });
-  assert.equal(g.s.run.gold, 26); assert.deepEqual(g.s.run.deck.filter(x => x.mod === 'holo').map(x => x.uid), uids);
-  const size = g.s.run.deck.length; g.run('BuyItem', { index: 1 }); g.run('PickDeckCards', { uids: [uids[0]] });
-  assert.equal(g.s.run.deck.length, size - 1);
+test('상점: 영입은 빈 칸에, 회복·묶음·새로고침·판매·자리 이동', () => {
+  const g = start();
+  const s = structuredClone(g.s); s.battle.monster.hp = 1; g.s = s; g.run('Fight'); g.run('CashOut');
+  const t = structuredClone(g.s); t.run.gold = 60; t.run.team.characters[0].hp = 10; g.s = t;
+  // 영입: 빈 칸 1번에 들어간다
+  assert.equal(g.run('BuyCharacter', { index: 0 }).error, null);
+  assert.equal(g.s.run.team.characters[1].characterDefId, g.s.shop.recruits[0].defId);
+  assert.equal(g.run('BuyCharacter', { index: 0 }).error, 'target');
+  assert.equal(g.run('BuyCharacter', { index: 1 }).error, null);
+  const full = structuredClone(g.s); full.shop.recruits[0] = { defId: 'char_human_mage', cost: 1, sold: false }; g.s = full;
+  assert.equal(g.run('BuyCharacter', { index: 0 }).error, 'full');
+  // 치료
+  const gold = g.s.run.gold;
+  assert.equal(g.run('HealUnit', { slot: 0 }).error, null); assert.equal(g.s.run.team.characters[0].hp, rules.maxHpOf(g.s.run.team.characters[0], c)); assert.equal(g.s.run.gold, gold - 3);
+  assert.equal(g.run('HealUnit', { slot: 0 }).error, 'target');
+  // 묶음
+  const size = g.s.run.deck.length;
+  g.run('BuyPack', { packId: 'pack_stars' }); assert.equal(g.s.run.deck.length, size + 2); assert.equal(g.s.run.deck.slice(-2).every(k => k.defId === 'sticker_star'), true);
+  g.run('BuyPack', { packId: 'pack_stickers' }); assert.equal(g.s.run.deck.length, size + 5);
+  // 새로고침 비용 2 → 3
+  assert.equal(game.rerollCost(g.s, c), 2); g.run('Reroll'); assert.equal(game.rerollCost(g.s, c), 3);
+  // 자리 이동, 판매(마지막 1명은 불가)
+  const a = g.s.run.team.characters[0].instanceId; g.run('MoveCharacter', { from: 0, to: 2 }); assert.equal(g.s.run.team.characters[2].instanceId, a);
+  const before = g.s.run.gold; assert.equal(g.run('SellCharacter', { slot: 2 }).error, null); assert.ok(g.s.run.gold > before);
+  g.run('SellCharacter', { slot: 0 }); assert.equal(g.run('SellCharacter', { slot: 1 }).error, 'lastCharacter');
 });
 
-test('흐름: 건너뛰기는 태그를 주고, 보스는 건너뛸 수 없다', () => {
-  const g = runner(); g.run('PickStarter', { index: 0 });
-  const tag = data.byId(c.tags, game.blindInfo(g.s.run, c).tagId), gold = g.s.run.gold;
-  g.run('SkipBlind');
-  assert.equal(g.s.run.blindIndex, 1); assert.equal(g.s.history[0].outcome, 'skip');
-  if (tag.effect === 'gold') assert.equal(g.s.run.gold, gold + tag.value);
-  g.run('SkipBlind'); assert.equal(g.run('SkipBlind').error, 'boss');
+test('패배: 동료가 모두 쓰러지면 원정이 끝난다', () => {
+  const g = start();
+  const s = structuredClone(g.s); s.run.team.characters[0].hp = 1; s.battle.monster.atk = 999; g.s = s;
+  g.run('Fight');
+  assert.equal(g.s.phase, 'run_result'); assert.equal(g.s.run.result, 'lose'); assert.equal(g.s.run.team.characters.filter(Boolean).length, 0);
 });
 
-test('흐름: 다섯 장 보스와 버리기 금지', () => {
-  const g = runner(); g.run('PickStarter', { index: 0 }); g.run('SelectBlind');
-  const s = structuredClone(g.s); s.battle.effect = 'exactFive'; g.s = s;
-  const u = g.s.run.team.characters[0].instanceId, h = g.s.battle.hand;
-  assert.equal(g.run('Attack', { plays: h.slice(0, 4).map(x => ({ uid: x.uid, targetInstanceId: u })) }).error, 'exactFive');
-  const s2 = structuredClone(g.s); s2.battle.discardsLeft = 0; g.s = s2;
-  assert.equal(g.run('Discard', { uids: [h[0].uid] }).error, 'noDiscards');
-});
-
-test('유리 각인은 깨지면 덱에서 사라진다', () => {
-  for (let seed = 1; seed < 60; seed++) {
-    const g = runner(seed); g.run('PickStarter', { index: 0 }); g.run('SelectBlind');
-    const s = structuredClone(g.s), uid = s.battle.hand[0].uid;
-    s.battle.hand[0].mod = 'glass'; s.run.deck.find(x => x.uid === uid).mod = 'glass'; g.s = s;
-    const r = g.run('Attack', { plays: [{ uid, targetInstanceId: g.s.run.team.characters[0].instanceId }] });
-    if (r.events.find(e => e.type === 'Attacked').broken.length) { assert.ok(!g.s.run.deck.some(x => x.uid === uid)); return; }
-  }
-  assert.fail('60번 안에 한 번도 깨지지 않음');
-});
-
-test('결정성: 같은 시드와 명령은 같은 결과, 봇이 런을 끝까지 진행한다', () => {
-  for (const seed of [1, 2, 3]) {
-    const a = playRun(seed), b = playRun(seed);
-    assert.equal(a.phase, 'run_result'); assert.deepEqual(a.history, b.history); assert.deepEqual(a.run, b.run);
+test('결정성과 균형: 같은 시드는 같은 결과, 봇이 런을 끝까지 진행, 첫 슬라임은 어느 시작 동료 혼자서도 잡는다', () => {
+  for (const seed of [1, 2, 3]) { const a = playRun(seed), b = playRun(seed); assert.equal(a.phase, 'run_result'); assert.deepEqual(a.history, b.history); assert.deepEqual(a.run, b.run); }
+  for (const d of c.characters) {
+    let win = 0;
+    for (let seed = 1; seed <= 12; seed++) if (playRun(seed, c, 'smart', { forceStarter: d.id, stopAfterFirst: true }).history[0]?.outcome === 'win') win++;
+    assert.ok(win >= 11, `${data.nameOf(d.id)} 첫 슬라임 ${win}/12`);
   }
 });

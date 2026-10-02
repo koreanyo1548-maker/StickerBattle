@@ -1,79 +1,54 @@
 modules["src/content/data.mjs"]=(()=>{
 const {applyArt}=modules["src/content/art.mjs"];
 
-// 수치는 이 표에서만 수정한다. 데이터에는 화면 요소나 로직을 저장하지 않는다. 규칙 설명은 docs/balatro-redesign.md.
+// 수치는 이 표에서만 수정한다. 데이터에는 화면 요소나 로직을 저장하지 않는다. 규칙 설명은 docs/rpg-redesign.md.
 const balance=Object.freeze({
- handSize:7,maxPlay:5,attacks:4,discards:3,startSlots:3,maxSlots:5,anteCount:4,
- // 스티커 점수: 무기 칩 = weaponChips + weaponPlusChips × 강화, 속성 = elementChips 칩 + 속성 Lv 배율, 별 칩 = starChips × 별 Lv.
- // 상성: 블라인드를 이기는 속성은 배율이 속성 Lv × advantageMult, 지는 속성은 배율 0.
- weaponChips:10,weaponPlusChips:5,elementChips:5,starChips:5,advantageMult:2,
+ teamSize:3,anteCount:4,handSize:4,attachLimit:2,swapLimit:1,maxRounds:30,
+ // 레벨: 별 스티커 1장 = Lv+1(최대 maxLevel). 체력·공격에 levelGrowth^(Lv-1)을 곱한다.
+ maxLevel:10,levelGrowth:1.3,
+ // 무기: 공격 ×weaponMult, 같은 무기를 또 붙이면 강화 +1(공격 ×weaponPlusMult씩 추가).
+ weaponMult:1.2,weaponPlusMult:1.1,
+ // 상성: 이기면 공격 ×advantage, 지면 ÷advantage. 몬스터가 때릴 때도 같은 배율이 양방향으로 걸린다.
+ advantage:1.5,
+ // 적성: 직업에 어울리는 무기가 아니면 그 캐릭터의 공격과 스킬 수치에 mismatchFit을 곱한다.
+ mismatchFit:0.5,
 });
 const labels={
  race_human:'인간',race_elf:'엘프',race_orc:'오크',race_dwarf:'드워프',job_warrior:'전사',job_archer:'궁수',job_mage:'마법사',
  weapon_sword:'검',weapon_bow:'활',weapon_staff:'지팡이',element_fire:'불',element_water:'물',element_lightning:'번개',sticker_star:'별',
 };
 const races=['human','elf','orc','dwarf'].map(v=>({id:`race_${v}`,nameKey:`race_${v}`,iconAssetId:`icon_race_${v}`}));
-const jobs=['warrior','archer','mage'].map(v=>({id:`job_${v}`,nameKey:`job_${v}`,iconAssetId:`icon_job_${v}`}));
+// 직업: 기본 체력·공격, 어울리는 무기, 영입 가격. 종족은 지금은 겉모습뿐이다(변주는 나중).
+const jobs=[
+ {id:'job_warrior',nameKey:'job_warrior',iconAssetId:'icon_job_warrior',hp:120,atk:10,weaponId:'weapon_sword',cost:4},
+ {id:'job_archer',nameKey:'job_archer',iconAssetId:'icon_job_archer',hp:80,atk:15,weaponId:'weapon_bow',cost:5},
+ {id:'job_mage',nameKey:'job_mage',iconAssetId:'icon_job_mage',hp:70,atk:12,weaponId:'weapon_staff',cost:5},
+];
 const weapons=['sword','bow','staff'].map((v,i)=>({id:`weapon_${v}`,nameKey:`weapon_${v}`,assetId:`asset_${v}`,compatibleRigIds:['rig_v1'],symbol:['†','⌒','✦'][i]}));
 const elements=['fire','water','lightning'].map((v,i)=>({id:`element_${v}`,nameKey:`element_${v}`,assetId:`asset_${v}`,color:['#d96943','#448cab','#d5a327'][i],symbol:['火','水','ϟ'][i]}));
-
-// 종족 = 무엇에 반응하는지(trigger), 직업 = 어떻게 계산하는지(effect). 수치는 effect별 표 abilityValues[종족][직업].
-// pairHand: 같은 스티커 2장 이상이 든 족보면 1회. elementCard·weaponCard: 낸 해당 스티커 1장마다. growth: 자기 성장치 G(강화 + 별 Lv + 속성 Lv).
-const raceTriggers={race_human:'pairHand',race_elf:'elementCard',race_orc:'weaponCard',race_dwarf:'growth'};
-const jobEffects={job_warrior:'chips',job_archer:'mult',job_mage:'xmult'};
-const abilityValues={
- race_human:{job_warrior:30,job_archer:4,job_mage:1.5},
- race_elf:{job_warrior:15,job_archer:2,job_mage:1.15},
- race_orc:{job_warrior:15,job_archer:2,job_mage:1.15},
- // 드워프 마법사: ×(1 + 값 × G)
- race_dwarf:{job_warrior:6,job_archer:1,job_mage:0.1},
-};
-const jobCosts={job_warrior:4,job_archer:5,job_mage:6};
-const characters=races.flatMap(r=>jobs.map(j=>({id:`char_${r.id.slice(5)}_${j.id.slice(4)}`,nameKey:`char_${r.id.slice(5)}_${j.id.slice(4)}`,raceId:r.id,jobId:j.id,trigger:raceTriggers[r.id],effect:jobEffects[j.id],value:abilityValues[r.id][j.id],cost:jobCosts[j.id],visualProfileId:`visual_${r.id.slice(5)}_${j.id.slice(4)}`})));
+const characters=races.flatMap(r=>jobs.map(j=>({id:`char_${r.id.slice(5)}_${j.id.slice(4)}`,nameKey:`char_${r.id.slice(5)}_${j.id.slice(4)}`,raceId:r.id,jobId:j.id,hp:j.hp,atk:j.atk,cost:j.cost,visualProfileId:`visual_${r.id.slice(5)}_${j.id.slice(4)}`})));
 characters.forEach(c=>labels[c.nameKey]=`${labels[c.raceId]} ${labels[c.jobId]}`);
 
-// 스티커 정의(검·활·지팡이·불·물·번개·별 7종)가 족보 판정의 "같은 스티커" 단위다.
+// 스티커 7종. 덱은 별을 많이, 무기·속성은 3장씩.
 const stickers=[...weapons.map(w=>({id:w.id.replace('weapon_','sticker_'),kind:'weapon',payloadId:w.id,nameKey:w.nameKey,iconAssetId:w.assetId})),...elements.map(e=>({id:e.id.replace('element_','sticker_'),kind:'element',payloadId:e.id,nameKey:e.nameKey,iconAssetId:e.assetId})),{id:'sticker_star',kind:'star',payloadId:null,nameKey:'sticker_star',iconAssetId:'asset_star'}];
-const initialDeck=stickers.flatMap(s=>Array(4).fill(s.id));
+const initialDeck=stickers.flatMap(s=>Array(s.kind==='star'?8:3).fill(s.id));
 
-// 족보: 우선순위(rank)가 높은 것부터 판정한다. 우선순위는 손패 7장에서 만들 수 있는 확률의 역순이다
-// (덱 28장 기준: 페어 98% · 투페어 68% · 삼원소·삼무기 각 30% · 트리플 26% · 풀하우스 16% · 포카드 1.3%. 오중은 같은 스티커 5장이 덱에 있어야 함).
-// 삼원소·삼무기는 같은 우선순위로, 둘 다 되면 지금 레벨에서 점수가 큰 쪽.
-const hands=[
- {id:'five',name:'오중',chips:120,mult:12,perChips:35,perMult:3,rank:9,text:'같은 스티커 5장'},
- {id:'four',name:'포카드',chips:60,mult:7,perChips:30,perMult:3,rank:8,text:'같은 스티커 4장'},
- {id:'fullHouse',name:'풀하우스',chips:40,mult:4,perChips:25,perMult:2,rank:7,text:'같은 스티커 3장 + 2장'},
- {id:'triple',name:'트리플',chips:35,mult:4,perChips:20,perMult:2,rank:6,text:'같은 스티커 3장'},
- {id:'triElement',name:'삼원소',chips:30,mult:3,perChips:20,perMult:2,rank:5,text:'불·물·번개'},
- {id:'triWeapon',name:'삼무기',chips:30,mult:3,perChips:20,perMult:2,rank:5,text:'검·활·지팡이'},
- {id:'twoPair',name:'투페어',chips:20,mult:2,perChips:20,perMult:1,rank:4,text:'같은 스티커 2장 + 2장'},
- {id:'pair',name:'페어',chips:10,mult:2,perChips:15,perMult:1,rank:3,text:'같은 스티커 2장'},
- {id:'single',name:'낱장',chips:5,mult:1,perChips:10,perMult:1,rank:1,text:'그 밖'},
-];
-// 인간 능력(pairHand)이 반응하는 족보.
-const pairHands=['pair','twoPair','triple','fullHouse','four','five'];
-
-// 조합 무기: 무기 + 속성이 같은 캐릭터에 있으면 기본 능력 다음에 발동하는 진화 능력.
-// ability: retriggerSelf · chipsPerDiscard(value) · autoEnhance · retriggerRight · elementsSame · retriggerLeft · lastAttackXMult(value) · allDifferentXMult(value) · charge(value)
-const weaponRecipes=[
- ['flame_sword','sword','fire','화염검','retriggerSelf',0,'자기 기본 능력을 한 번 더'],
- ['reflux_sword','sword','water','역류검','chipsPerDiscard',20,'남은 버리기 1회당 +20 칩'],
- ['hone_sword','sword','lightning','연마검','autoEnhance',1,'공격할 때마다 자기 무기 강화 +1'],
- ['blast_bow','bow','fire','폭발궁','retriggerRight',0,'오른쪽 캐릭터의 기본 능력을 한 번 더'],
- ['rainbow_bow','bow','water','무지개 활','elementsSame',0,'속성 스티커를 모두 같은 스티커로 쳐요(삼원소는 안 돼요)'],
- ['chain_bow','bow','lightning','연쇄궁','retriggerLeft',0,'왼쪽 캐릭터의 기본 능력을 한 번 더'],
- ['flame_staff','staff','fire','화염 지팡이','lastAttackXMult',3,'블라인드의 마지막 공격이면 ×3'],
- ['balance_staff','staff','water','균형 지팡이','allDifferentXMult',2,'낸 스티커가 모두 다른 종류면 ×2'],
- ['charge_staff','staff','lightning','축적 지팡이','charge',1,'공격할 때마다 영구 +1 배율 누적, 누적만큼 +배율'],
-].map(([key,w,e,name,ability,value,text])=>({id:`recipe_${key}`,weaponId:`weapon_${w}`,elementId:`element_${e}`,assetId:`asset_${key}`,name,ability,value,text}));
-
-// 각인: 덱의 스티커 카드 한 장에 붙는 강화. 점수 단계에서 그 카드가 계산될 때 적용한다.
-const mods=[
- {id:'shiny',name:'반짝이',chips:30,text:'+30 칩'},
- {id:'holo',name:'홀로',mult:5,text:'+5 배율'},
- {id:'gold',name:'금박',xmult:1.5,text:'×1.5'},
- {id:'glass',name:'유리',xmult:2,breakChance:0.25,text:'×2, 공격 뒤 25% 확률로 깨짐'},
-];
+// 스킬: 무기 + 속성이 함께 있으면 생긴다. 속성이 성격(불 폭발·물 수호·번개 성장), 무기가 액티브 여부(불=검, 물=지팡이, 번개=활이 액티브).
+// 레벨은 1로 고정. 쿨타임은 쓴 뒤 쉬는 라운드 수. 수치는 적성 계수 s가 곱해진다(fitOwn·fitAura는 제외).
+// damage: 공격 ×mult 피해를 hits번 · heal: 체력 비율이 가장 낮은 동료를 최대 체력의 ratio만큼 회복(다친 동료가 있을 때만 발동)
+// atkIfMonsterLow: 몬스터 체력이 threshold 이하면 이 캐릭터 공격 +bonus · auraAtk: 원정대 전체 공격 +bonus · damageReduce: 이 캐릭터가 받는 피해 −ratio
+// atkStack: 이 캐릭터 공격이 라운드마다 +perRound씩(최대 max) · fitOwn: 이 캐릭터의 적성 계수를 1로 · fitAura: 원정대 전체의 불일치 계수를 value로
+const skills=[
+ ['flame_sword','sword','fire','화염검','active',{type:'damage',mult:3,hits:1},3,'몬스터에게 공격 ×3 피해'],
+ ['blast_bow','bow','fire','폭발궁','passive',{type:'atkIfMonsterLow',threshold:0.5,bonus:0.4},0,'몬스터 체력이 절반 이하일 때 공격 +40%'],
+ ['flame_staff','staff','fire','화염 지팡이','passive',{type:'auraAtk',bonus:0.1},0,'원정대 전체 공격 +10%'],
+ ['balance_staff','staff','water','균형 지팡이','active',{type:'heal',ratio:0.4},3,'가장 약한 동료를 최대 체력의 40% 회복'],
+ ['reflux_sword','sword','water','역류검','passive',{type:'damageReduce',ratio:0.25},0,'이 캐릭터가 받는 피해 −25%'],
+ ['rainbow_bow','bow','water','무지개 활','passive',{type:'fitOwn'},0,'이 캐릭터의 직업·무기 불일치 페널티를 없앰'],
+ ['chain_bow','bow','lightning','연쇄궁','active',{type:'damage',mult:1.2,hits:3},3,'공격 ×1.2 피해를 3번 연속으로'],
+ ['hone_sword','sword','lightning','연마검','passive',{type:'atkStack',perRound:0.05,max:0.5},0,'이 캐릭터의 공격이 라운드마다 +5%씩 쌓임(최대 +50%)'],
+ ['charge_staff','staff','lightning','축적 지팡이','passive',{type:'fitAura',value:0.75},0,'원정대 전체의 불일치 페널티를 절반으로 줄임'],
+].map(([key,w,e,name,kind,effect,cooldown,text])=>({id:`skill_${key}`,weaponId:`weapon_${w}`,elementId:`element_${e}`,assetId:`asset_${key}`,name,kind,effect,cooldown,text}));
 
 const rig={id:'rig_v1',width:512,height:512,outline:8,anchors:{body:{x:0,y:0},weapon:{x:356,y:318},hand:{x:356,y:318},element:{x:386,y:158}},layerOrder:['body','weapon','hand','element']};
 // file에 투명 PNG 경로를 넣으면 해당 임시 파츠만 자동 교체된다.
@@ -83,12 +58,13 @@ const visuals={};
 characters.forEach(c=>{visuals[c.visualProfileId]={id:c.visualProfileId,rigId:rig.id,bodyAssetId:asset(`${c.id}_body`),frontHandAssetId:asset(`${c.id}_hand`,{x:712,y:636}),anchors:rig.anchors,layerOrder:rig.layerOrder};});
 weapons.forEach(w=>asset(w.assetId,{x:712,y:636}));elements.forEach(e=>asset(e.assetId,{x:772,y:316}));asset('asset_star');[...races,...jobs].forEach(d=>asset(d.iconAssetId));asset('asset_background');
 
-// 블라인드: 앤티마다 스몰·빅·보스. 목표 = anteBase[앤티] × 종류 배수. 속성은 런 시작 때 시드로 정한다.
-const anteBase=[1000,5000,20000,90000];
+// 블라인드: 앤티마다 스몰·빅·보스. 몬스터 수치는 12개를 개별로 둔다(순서: 앤티1 스몰·빅·보스, 앤티2 …): [체력, 공격].
+// 첫 스몰(앤티1 스몰)은 시작 동료 혼자서 잡을 수 있어야 한다(tools/balance-bot.mjs solo로 확인). 속성은 런 시작 때 시드로 정한다.
+const monsterStats=[[110,10],[430,64],[1160,105],[1180,150],[1920,175],[2980,240],[2690,300],[3880,340],[5250,410],[3960,320],[5770,390],[8420,400]];
 const blindKinds=[
- {id:'small',name:'스몰 블라인드',targetMult:1,gold:3,diamonds:2,skippable:true},
- {id:'big',name:'빅 블라인드',targetMult:1.5,gold:4,diamonds:3,skippable:true},
- {id:'boss',name:'보스 블라인드',targetMult:2,gold:5,diamonds:5,skippable:false},
+ {id:'small',name:'스몰 블라인드',gold:4,diamonds:2},
+ {id:'big',name:'빅 블라인드',gold:5,diamonds:3},
+ {id:'boss',name:'보스 블라인드',gold:6,diamonds:5},
 ];
 // 일반 블라인드는 블라인드 속성의 몬스터, 보스 블라인드는 bossMonsterId.
 const monsters=[...elements.map(e=>({id:`monster_${e.id.slice(8)}`,elementId:e.id})),{id:'monster_boss',elementId:null}].map(m=>({...m,nameKey:m.id,assetId:asset(`asset_${m.id}`)}));
@@ -96,87 +72,53 @@ const bossMonsterId='monster_boss';
 Object.assign(labels,{monster_fire:'불꽃 슬라임',monster_water:'물결 슬라임',monster_lightning:'번개 슬라임',monster_boss:'슬라임 왕'});
 asset('asset_reward_back');
 applyArt(assets,visuals);
-// 상성: 키가 값을 이긴다. 블라인드 속성을 이기는 속성 스티커는 배율 ×advantageMult(덧셈 배율이 커짐), 지는 속성 스티커는 배율을 주지 않는다.
+// 상성: 키가 값을 이긴다.
 const affinity={beats:{element_fire:'element_lightning',element_lightning:'element_water',element_water:'element_fire'}};
-// 보스 규칙: 앤티마다 하나, 런 시작 때 겹치지 않게 시드로 정한다.
-const bossRules=[
- {id:'boss_weapon',effect:'weaponSeal',name:'무기 봉인',text:'무기 스티커가 칩을 주지 않아요'},
- {id:'boss_element',effect:'elementSeal',name:'속성 봉인',text:'속성 스티커가 배율을 주지 않아요'},
- {id:'boss_star',effect:'starSeal',name:'별 봉인',text:'별 스티커가 칩을 주지 않아요'},
- {id:'boss_flat',effect:'flatHands',name:'족보 하향',text:'족보 레벨이 모두 1로 계산돼요'},
- {id:'boss_silence',effect:'silence',name:'침묵',text:'공격마다 캐릭터 1명의 능력이 멈춰요'},
- {id:'boss_invert',effect:'invertAffinity',name:'상성 반전',text:'유리와 불리가 뒤바뀌어요'},
- {id:'boss_five',effect:'exactFive',name:'다섯 장',text:'공격은 정확히 5장으로만 해요'},
- {id:'boss_nodiscard',effect:'noDiscard',name:'버리기 금지',text:'버리기를 할 수 없어요'},
+// 시작 동료 고르기: 무작위 3명을 보여 주고 뒤집어 섞은 뒤 고른다. 섞는 횟수는 눈으로 따라갈 수 없을 만큼 많이.
+const starterRules={offers:3,swaps:24};
+// 경제. 골드는 승리 보상 + 빨리 끝낸 보너스(speedTurns 이내) + 이자.
+const economy={startGold:6,speedTurns:3,speedGold:2,interestPer:5,interestMax:3};
+// 상점: 동료 영입(직업별 가격), 고정 물건, 새로고침. 회복은 골드를 내고 한 명 또는 전체.
+const shopRules={recruitOffers:2,rerollCost:2,rerollStep:1,healOneCost:3,healAllCost:6,healAllRatio:0.4,sellRate:0.5};
+const packs=[
+ {id:'pack_stickers',name:'스티커 묶음',cost:4,text:'덱에 무작위 스티커 3장',count:3,kinds:'any'},
+ {id:'pack_stars',name:'별 묶음',cost:3,text:'덱에 별 2장',count:2,kinds:'star'},
 ];
-// 건너뛰기 태그: gold(즉시 골드) · freeRerolls(다음 상점) · halfCharacters(다음 상점 캐릭터 반값) · handLevels(무작위 족보) · shinyCards(덱 무작위 카드)
-const tags=[
- {id:'tag_gold',effect:'gold',value:8,name:'투자',text:'골드 +8'},
- {id:'tag_reroll',effect:'freeRerolls',value:2,name:'재고 정리',text:'다음 상점 리롤 2회 무료'},
- {id:'tag_discount',effect:'halfCharacters',value:1,name:'할인',text:'다음 상점 캐릭터 반값'},
- {id:'tag_level',effect:'handLevels',value:2,name:'연구',text:'무작위 족보 Lv +2'},
- {id:'tag_shiny',effect:'shinyCards',value:2,name:'광택',text:'덱의 무작위 스티커 2장 반짝이'},
-];
-// 상점. 물건 effect: handLevel(무작위 족보 Lv+1) · addSticker(무작위 스티커, 낮은 확률로 각인) · mod(덱 카드 pick장에 각인) · remove(덱 카드 pick장 제거) · copy(덱 카드 1장 복제)
-const economy={startGold:4,attackGold:1,interestPer:5,interestMax:5,attackDiamonds:1};
-const shopRules={characterOffers:2,itemOffers:2,rerollCost:5,rerollStep:1,slotCosts:[10,15],sellRate:0.5};
-const items=[
- {id:'item_hand',effect:'handLevel',cost:3,weight:4,name:'족보서',text:'무작위 족보 Lv +1'},
- {id:'item_sticker',effect:'addSticker',cost:2,weight:3,name:'스티커 한 장',text:'덱에 무작위 스티커 1장 추가'},
- {id:'item_shiny',effect:'mod',mod:'shiny',pick:2,cost:3,weight:2,name:'반짝이 주문서',text:'덱 카드 최대 2장에 반짝이(+30 칩)'},
- {id:'item_holo',effect:'mod',mod:'holo',pick:2,cost:4,weight:2,name:'홀로 주문서',text:'덱 카드 최대 2장에 홀로(+5 배율)'},
- {id:'item_gold',effect:'mod',mod:'gold',pick:1,cost:5,weight:1,name:'금박 주문서',text:'덱 카드 1장에 금박(×1.5)'},
- {id:'item_glass',effect:'mod',mod:'glass',pick:2,cost:3,weight:1,name:'유리 주문서',text:'덱 카드 최대 2장에 유리(×2, 깨질 수 있음)'},
- {id:'item_remove',effect:'remove',pick:2,cost:3,weight:2,name:'지우개',text:'덱 카드 최대 2장 제거'},
- {id:'item_copy',effect:'copy',pick:1,cost:4,weight:2,name:'복사기',text:'덱 카드 1장 복제'},
-];
-// 스티커 한 장(addSticker)이 각인을 달고 나올 확률.
-const addStickerMods=[{mod:null,weight:70},{mod:'shiny',weight:15},{mod:'holo',weight:10},{mod:'gold',weight:5}];
 
-const content={version:'1.0.0',balance,affinity,labels,races,jobs,weapons,elements,characters,stickers,initialDeck,hands,pairHands,weaponRecipes,mods,rig,assets,visuals,anteBase,blindKinds,monsters,bossMonsterId,bossRules,tags,economy,shopRules,items,addStickerMods};
+const content={version:'2.0.0',balance,affinity,labels,races,jobs,weapons,elements,characters,stickers,initialDeck,skills,rig,assets,visuals,monsterStats,blindKinds,monsters,bossMonsterId,starterRules,economy,shopRules,packs};
 const byId=(list,id)=>list.find(x=>x.id===id);
 const nameOf=id=>labels[id]??id??'없음';
 function deepFreeze(v){if(v&&typeof v==='object'&&!Object.isFrozen(v)){Object.values(v).forEach(deepFreeze);Object.freeze(v);}return v;}
 deepFreeze(content);
-const recipeAbilities=['retriggerSelf','chipsPerDiscard','autoEnhance','retriggerRight','elementsSame','retriggerLeft','lastAttackXMult','allDifferentXMult','charge'];
-const bossEffects=['weaponSeal','elementSeal','starSeal','flatHands','silence','invertAffinity','exactFive','noDiscard'];
-const tagEffects=['gold','freeRerolls','halfCharacters','handLevels','shinyCards'];
-const itemEffects=['handLevel','addSticker','mod','remove','copy'];
+const skillTypes=['damage','heal','atkIfMonsterLow','auraAtk','damageReduce','atkStack','fitOwn','fitAura'];
 function validateContent(c=content){
  const check=(v,msg)=>{if(!v)throw Error(`콘텐츠 오류: ${msg}`);};
  const num=v=>Number.isFinite(v)&&v>=0,int=v=>Number.isInteger(v)&&v>=0;
- for(const [key,table] of Object.entries({characters:c.characters,stickers:c.stickers,hands:c.hands,weaponRecipes:c.weaponRecipes,mods:c.mods,weapons:c.weapons,elements:c.elements,races:c.races,jobs:c.jobs,monsters:c.monsters,bossRules:c.bossRules,tags:c.tags,items:c.items,blindKinds:c.blindKinds}))check(new Set(table.map(x=>x.id)).size===table.length,`${key} ID 중복`);
+ for(const [key,table] of Object.entries({characters:c.characters,stickers:c.stickers,skills:c.skills,weapons:c.weapons,elements:c.elements,races:c.races,jobs:c.jobs,monsters:c.monsters,blindKinds:c.blindKinds,packs:c.packs}))check(new Set(table.map(x=>x.id)).size===table.length,`${key} ID 중복`);
  Object.entries(c.balance).forEach(([k,v])=>check(num(v),`수치 ${k}`));
  const b=c.balance;
- check(b.startSlots>=1&&b.maxSlots>=b.startSlots&&b.maxPlay>=1&&b.maxPlay<=b.handSize&&b.attacks>=1,'전투 수치');
- for(const d of c.characters){
-  check(byId(c.races,d.raceId)&&byId(c.jobs,d.jobId)&&c.visuals[d.visualProfileId],'캐릭터 참조');
-  check(['pairHand','elementCard','weaponCard','growth'].includes(d.trigger)&&['chips','mult','xmult'].includes(d.effect)&&num(d.value)&&int(d.cost)&&d.cost>0,'캐릭터 능력');
-  check(d.effect!=='xmult'||d.trigger==='growth'||d.value>=1,'×배율 능력은 1 이상');
- }
+ check(b.teamSize===3&&b.handSize>=b.attachLimit&&b.attachLimit>=1&&b.maxLevel>=1&&b.levelGrowth>=1&&b.mismatchFit>0&&b.mismatchFit<=1,'전투 수치');
+ for(const j of c.jobs)check(num(j.hp)&&j.hp>0&&num(j.atk)&&j.atk>0&&byId(c.weapons,j.weaponId)&&int(j.cost)&&j.cost>0,'직업');
+ for(const d of c.characters){check(byId(c.races,d.raceId)&&byId(c.jobs,d.jobId)&&c.visuals[d.visualProfileId],'캐릭터 참조');check(num(d.hp)&&num(d.atk),'캐릭터 스탯');}
  for(const v of Object.values(c.visuals))check(v.rigId===c.rig.id&&c.assets[v.bodyAssetId]&&c.assets[v.frontHandAssetId],'몸체 rig/파츠');
  for(const w of c.weapons)check(w.compatibleRigIds.includes(c.rig.id)&&c.assets[w.assetId],'무기 rig/이미지');
  for(const s of c.stickers){check(c.assets[s.iconAssetId],'스티커 이미지');check(s.kind==='weapon'?byId(c.weapons,s.payloadId):s.kind==='element'?byId(c.elements,s.payloadId):s.kind==='star','스티커 구성');}
  c.initialDeck.forEach(id=>check(byId(c.stickers,id),'덱 참조'));
- check(c.initialDeck.length>=b.handSize,'덱 크기');
- for(const h of c.hands)check(num(h.chips)&&num(h.mult)&&num(h.perChips)&&num(h.perMult)&&int(h.rank)&&h.name&&h.text,'족보');
- check(c.pairHands.every(id=>byId(c.hands,id)),'인간 족보 참조');
- check(new Set(c.weaponRecipes.map(r=>r.weaponId+':'+r.elementId)).size===c.weaponRecipes.length&&c.weaponRecipes.length===c.weapons.length*c.elements.length,'조합 무기는 무기×속성 한 개씩');
- for(const r of c.weaponRecipes)check(byId(c.weapons,r.weaponId)&&byId(c.elements,r.elementId)&&c.assets[r.assetId]&&recipeAbilities.includes(r.ability)&&num(r.value)&&r.name&&r.text,'조합 무기');
- for(const m of c.mods)check(m.name&&m.text&&(m.chips||m.mult||m.xmult)&&(!m.breakChance||(m.breakChance>0&&m.breakChance<1)),'각인');
- check(c.anteBase.length===b.anteCount&&c.anteBase.every((v,i)=>int(v)&&v>0&&(i===0||v>c.anteBase[i-1])),'앤티 목표');
- check(c.blindKinds.length===3&&c.blindKinds[2].id==='boss'&&!c.blindKinds[2].skippable&&c.blindKinds.every(k=>num(k.targetMult)&&int(k.gold)&&int(k.diamonds)),'블라인드 종류');
+ check(c.initialDeck.length>=b.handSize*2,'덱 크기');
+ check(new Set(c.skills.map(r=>r.weaponId+':'+r.elementId)).size===c.skills.length&&c.skills.length===c.weapons.length*c.elements.length,'스킬은 무기×속성 한 개씩');
+ for(const s of c.skills){check(byId(c.weapons,s.weaponId)&&byId(c.elements,s.elementId)&&c.assets[s.assetId]&&s.name&&s.text&&skillTypes.includes(s.effect.type),'스킬');check(['active','passive'].includes(s.kind)&&(s.kind==='passive'||int(s.cooldown)&&s.cooldown>0),'스킬 종류·쿨타임');}
+ check(c.elements.every(e=>c.skills.filter(s=>s.elementId===e.id&&s.kind==='active').length===1),'속성마다 액티브 1개');
+ check(c.monsterStats.length===b.anteCount*c.blindKinds.length&&c.monsterStats.every(([hp,atk])=>int(hp)&&hp>0&&int(atk)&&atk>0),'몬스터 수치 12개');
+ check(c.blindKinds.length===3&&c.blindKinds[2].id==='boss'&&c.blindKinds.every(k=>int(k.gold)&&int(k.diamonds)),'블라인드 종류');
  for(const m of c.monsters)check((!m.elementId||byId(c.elements,m.elementId))&&c.assets[m.assetId]&&labels[m.nameKey],'몬스터 참조');
  check(byId(c.monsters,c.bossMonsterId)&&c.elements.every(e=>c.monsters.some(m=>m.elementId===e.id)),'몬스터');
- check(c.bossRules.length>=b.anteCount&&c.bossRules.every(r=>bossEffects.includes(r.effect)&&r.name&&r.text),'보스 규칙');
- check(c.tags.length>0&&c.tags.every(t=>tagEffects.includes(t.effect)&&int(t.value)&&t.value>0&&t.name&&t.text),'태그');
- check(c.items.every(i=>itemEffects.includes(i.effect)&&int(i.cost)&&i.cost>0&&int(i.weight)&&i.weight>0&&(i.effect!=='mod'||byId(c.mods,i.mod))&&(!['mod','remove','copy'].includes(i.effect)||(int(i.pick)&&i.pick>0))),'상점 물건');
- check(c.addStickerMods.every(x=>(x.mod===null||byId(c.mods,x.mod))&&int(x.weight)),'스티커 각인 확률');
- const s=c.shopRules;check(int(s.characterOffers)&&int(s.itemOffers)&&int(s.rerollCost)&&s.slotCosts.length===b.maxSlots-b.startSlots&&s.sellRate>0&&s.sellRate<=1,'상점 규칙');
+ check(c.starterRules.offers===3&&int(c.starterRules.swaps)&&c.starterRules.swaps>=12,'시작 동료 섞기');
  check(int(c.economy.startGold)&&int(c.economy.interestPer)&&c.economy.interestPer>0,'경제');
+ const s=c.shopRules;check(int(s.recruitOffers)&&int(s.rerollCost)&&int(s.healOneCost)&&int(s.healAllCost)&&s.sellRate>0&&s.sellRate<=1&&s.healAllRatio>0&&s.healAllRatio<=1,'상점 규칙');
+ check(c.packs.every(p=>int(p.cost)&&p.cost>0&&int(p.count)&&p.count>0&&['any','star'].includes(p.kinds)&&p.name&&p.text),'묶음');
  for(const [k,v] of Object.entries(c.affinity.beats))check(byId(c.elements,k)&&byId(c.elements,v),'상성 참조');
  {const bt=c.affinity.beats,seen=new Set();let k=c.elements[0].id;while(k&&!seen.has(k)){seen.add(k);k=bt[k];}check(k===c.elements[0].id&&seen.size===c.elements.length,'상성은 모든 속성을 한 바퀴 도는 순환');}
  return true;
 }
 
-return {balance,affinity,labels,races,jobs,weapons,elements,characters,stickers,initialDeck,hands,pairHands,weaponRecipes,mods,rig,assets,visuals,anteBase,blindKinds,monsters,bossMonsterId,bossRules,tags,economy,shopRules,items,addStickerMods,content,byId,nameOf,validateContent};})();
+return {balance,affinity,labels,races,jobs,weapons,elements,characters,stickers,initialDeck,skills,rig,assets,visuals,monsterStats,blindKinds,monsters,bossMonsterId,starterRules,economy,shopRules,packs,content,byId,nameOf,validateContent};})();

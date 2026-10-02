@@ -1,7 +1,7 @@
 modules["src/presentation/main.mjs"]=(()=>{
 const {content,byId,nameOf,validateContent}=modules["src/content/data.mjs"];
-const {makeUnit,recipeFor,weaponPower,activeCombos,effectStrength,relationOf,levelOf}=modules["src/domain/rules.mjs"];
-const {initialState,projectedScore,applyCommand}=modules["src/application/game.mjs"];
+const {makeUnit,recipeFor,weaponPower,activeCombos,relationOf,levelOf,sealOf}=modules["src/domain/rules.mjs"];
+const {initialState,projectedScore,attachLimitFor,applyCommand}=modules["src/application/game.mjs"];
 const {renderCharacter}=modules["src/rendering/compositor.mjs"];
 
 validateContent();
@@ -15,8 +15,9 @@ const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const messages={target:'캐릭터가 있는 자리에 붙여주세요.',card:'사용할 수 없는 스티커입니다.',same:'이미 같은 무기가 붙어 있어요.',limit:'이번 턴은 모두 붙였어요.',phase:'지금은 할 수 없어요.',sameCharacter:'같은 캐릭터로는 교체할 수 없어요.',rig:'이 캐릭터에게 맞지 않는 무기입니다.',duplicate:'이미 처리한 행동입니다.'};
 const shortReason={same:'같은 무기',rig:'장착 불가',target:'빈 자리',sameCharacter:'같은 캐릭터'};
 const axisLabels={race:'종족',job:'직업',weapon:'무기',element:'속성',star:'별'};
-const comboLabels={pair:'페어',collection:'컬렉션',straight:'스트레이트',triple:'트리플'};
-const levelKindLabels={pair:'페어',collection:'컬렉션',triple:'트리플'};
+const comboLabels={collection:'컬렉션',triple:'트리플'};
+const levelKindLabels={collection:'컬렉션',triple:'트리플'};
+const limit=()=>attachLimitFor(state,c);
 const gradeLabels={low:'하',mid:'중',high:'상'};
 const relationMark={advantage:'▲',disadvantage:'▼',neutral:''};
 const number=v=>Number.isInteger(v)?String(v):String(Number(v.toFixed(2)));
@@ -36,15 +37,9 @@ function comboChanges(before,after){
  before.forEach(m=>{if(!after.some(a=>a.axis===m.axis))out.push({axis:m.axis,text:`${comboName(m)} 해제`,gain:false});});
  return out;
 }
-// 조합 무기 효과 문장. level을 주면 그 레벨의 수치로 쓴다.
-function effectDescription(recipe,level=1){
- const e=byId(c.weaponEffects,recipe.effectId),s=number(effectStrength(e,level));
- const cond=e.condition==='combo'?`${axisLabels[e.axis]} ${comboLabels[e.kinds[0]]}${e.kinds.length>1?' 이상':''}이면 `:e.condition==='completeAxes'?`${e.axes.map(a=>axisLabels[a]).join('·')}의 컬렉션·트리플마다 `:e.condition==='collections'?'컬렉션·스트레이트마다 ':e.condition==='starBalance'?`3명의 별 Lv 차이가 ${e.maxGap} 이하면 `:'';
- const scale=e.scaleBy==='starLevelSum'?'별 Lv 합×':e.scaleBy==='maxStarLevel'?'최고 별 Lv×':'';
- const what=e.operation==='multiply'?`배율 ×${s}`:e.operation==='add'?`기초 +${scale}${s}`:e.operation==='targetPercent'?`최종 점수 + 목표의 ${s}%`:`누적 +${scale}${s}`;
- return `${e.operation==='accumulate'?'턴 종료 시 ':''}${cond}${what}`;
-}
-function effectKind(recipe){const op=byId(c.weaponEffects,recipe.effectId).operation;return op==='multiply'?'mul':op==='accumulate'?'acc':'add';}
+// 조합 무기(T1) 효과 문장. 조건 없이 무기 + 속성이면 성립한다.
+function effectDescription(recipe,level=1){return `T1 기초 +${c.balance.t1Power*level}`;}
+function effectKind(){return 'add';}
 // 점수 계산은 상태가 바뀔 때만 한다. 한 번의 렌더와 드래그 중 미리보기가 같은 결과를 재사용한다.
 let memoState=null,memoReading=null;const memoPreview=new Map();
 function syncMemo(){if(memoState!==state){memoState=state;memoReading=null;memoPreview.clear();}}
@@ -98,7 +93,6 @@ function buildFx(type,prev,next,events){
  }
  f.turnStart=events.some(e=>e.type==='TurnStarted');
  f.blindStart=events.some(e=>e.type==='BlindStarted');
- f.accumulated=events.find(e=>e.type==='Accumulated');
  f.resolve=next.phase==='resolve'&&prev.phase==='attach';
  f.shuffle=type==='ShuffleRewards';
  f.picked=type==='PickReward';
@@ -147,7 +141,7 @@ function scoreBoard(){
  const r=reading(),b=state.battle,gap=r.score-b.target;
  return `<button type="button" class="duel" id="duel" data-action="breakdown" aria-label="점수 계산 내역 보기">
  <div class="formula"><span class="chips"><small>기초</small><b id="chips">${number(r.chips)}</b></span><span class="op">×</span><span class="mult"><small>배율</small><b id="mult">${number(r.multiplier)}</b></span><span class="op">=</span><span class="score"><small>${state.phase==='attach'?'예상 점수':'최종 점수'}</small><b id="my-score">${r.score}</b></span></div>
- <div class="duel-foot"><span class="foe">${r.targetBonus?`목표 보너스 <b>+${r.targetBonus}</b>`:''}</span><span class="verdict ${gap>=0?'good':'bad'}" id="verdict">${gap>=0?`목표 달성 +${gap}`:`목표까지 ${-gap}`}</span></div>
+ <div class="duel-foot"><span class="foe">${r.t4.length?`T4 <b>${r.t4.map(x=>x.name).join(' · ')}</b>`:''}</span><span class="verdict ${gap>=0?'good':'bad'}" id="verdict">${gap>=0?`목표 달성 +${gap}`:`목표까지 ${-gap}`}</span></div>
  <div class="preview-line" id="preview-line"></div></button>`;
 }
 // final: 원정이 끝난 뒤라 상성을 표시하지 않는다.
@@ -160,8 +154,8 @@ function unitBadges(u,b,final=false){
 }
 function recipeChip(u,r){
  const recipe=recipeFor(u,c);if(!recipe)return '';
- const eff=r.effects.find(x=>x.sourceInstanceId===u.instanceId),lv=levelOf(state.run.levels,recipe.id);
- return `<span class="recipe ${eff?.active?'on':''} k-${effectKind(recipe)}">${u.weaponPlus?`+${u.weaponPlus} `:''}${recipe.name} Lv${lv}<i>${eff?.active?'✓':'✗'}</i></span>`;
+ const lv=levelOf(state.run.levels,recipe.id),on=sealOf(state.battle,c)!=='t1';
+ return `<span class="recipe ${on?'on':''} k-${effectKind(recipe)}">${u.weaponPlus?`+${u.weaponPlus} `:''}${recipe.name} Lv${lv}<i>${on?'✓':'✗'}</i></span>`;
 }
 function playerUnit(u,slot,r){
  let cls='',badge='';
@@ -172,13 +166,15 @@ function playerUnit(u,slot,r){
  return `<button type="button" class="punit ${cls} ${fx?.attached===slot?'slap':''}" data-action="attach" data-slot="${slot}" aria-label="${nameOf(u.characterDefId)}${selected?'에게 놓기':' 정보'}">${badge}${unitBadges(u,state.battle)}<canvas data-render="${u.instanceId}"></canvas><span class="uname">${nameOf(u.characterDefId)}</span>${recipeChip(u,r)}</button>`;
 }
 function playerZone(){
- const r=reading(),acc=state.run.accumulated;
- return `<section class="player-zone"><div class="zone-head"><strong>${uiIcon('sword')} 우리 원정대</strong>${acc?`<span class="acc" id="acc" title="번개 조합 무기가 쌓은 기초 점수">누적 +${number(acc)}</span>`:'<span class="acc" id="acc" hidden></span>'}</div><div class="party">${state.run.team.characters.map((u,slot)=>playerUnit(u,slot,r)).join('')}</div></section>`;
+ const r=reading(),tiers=[r.tiers.t2,r.tiers.t3].filter(Boolean).map(t=>`${t.name} +${number(t.power)}`);
+ return `<section class="player-zone"><div class="zone-head"><strong>${uiIcon('sword')} 우리 원정대</strong>${tiers.length?`<span class="acc" id="acc" title="종족 조합(T2)·직업 조합(T3)">${tiers.join(' · ')}</span>`:'<span class="acc" id="acc" hidden></span>'}</div><div class="party">${state.run.team.characters.map((u,slot)=>playerUnit(u,slot,r)).join('')}</div></section>`;
 }
-// 5칸은 성립하면 불이 켜지고(2명짜리 파랑, 3명짜리 금색), 오른쪽에 보너스 합계만. 자세한 내용은 말풍선.
+// 칸: 무기·속성 족보, 종족(T2)·직업(T3) 조합, T4. 성립하면 불이 켜지고 오른쪽에 덧셈 보너스 합계. 자세한 내용은 말풍선.
 function comboTray(){
  const r=reading(),burst=new Set((fx?.changes??[]).filter(x=>x.gain&&x.axis).map(x=>x.axis));
- return `<button type="button" class="tray" data-action="combos" aria-label="페어·트리플 보너스 +${number(r.combos)}, 자세히 보기"><span class="lights">${c.comboAxes.map(axis=>{const m=r.matches.find(x=>x.axis===axis);return `<span class="light ${m?(m.complete?'full':'part'):''} ${burst.has(axis)?'lit':''}"><small>${axisLabels[axis]}</small><i></i></span>`;}).join('')}</span><b class="tray-total ${r.combos?'on':''}" id="tray-total">+${number(r.combos)}</b></button>`;
+ const total=r.combos+r.t2+r.t3;
+ const lights=[...c.comboAxes.map(axis=>({on:r.matches.some(x=>x.axis===axis),label:axisLabels[axis],key:axis})),{on:!!r.tiers.t2,label:'종족',key:'race'},{on:!!r.tiers.t3,label:'직업',key:'job'},{on:r.t4.length>0,label:'T4',key:'t4'}];
+ return `<button type="button" class="tray" data-action="combos" aria-label="족보·조합 보너스 +${number(total)}, 자세히 보기"><span class="lights">${lights.map(l=>`<span class="light ${l.on?'full':''} ${burst.has(l.key)?'lit':''}"><small>${l.label}</small><i></i></span>`).join('')}</span><b class="tray-total ${total?'on':''}" id="tray-total">+${number(total)}</b></button>`;
 }
 // 고른 카드의 이름과 효과 한 줄.
 function cardTip(card){
@@ -191,28 +187,27 @@ function cardTip(card){
 function hintText(){
  const b=state.battle,sel=b.hand.find(x=>x.instanceId===selected);
  if(sel)return cardTip(sel);
- if(b.actionsUsed>=c.balance.attachLimit)return b.turn<c.balance.turnsPerBlind?'다 붙였어요. 턴을 넘기세요':'다 붙였어요. 전투하세요';
+ if(b.actionsUsed>=limit())return b.turn<c.balance.turnsPerBlind?'다 붙였어요. 턴을 넘기세요':'다 붙였어요. 전투하세요';
  if(!members(state.run.team).length)return '캐릭터 카드를 빈 자리에 놓으세요';
  return '스티커를 끌어서 캐릭터에 붙이세요';
 }
 function handDock(){
- const b=state.battle,left=c.balance.attachLimit-b.actionsUsed,last=b.turn>=c.balance.turnsPerBlind;
- return `<footer class="dock"><div class="hand-head"><span class="turn-chip ${last?'last':''}" aria-label="${b.turn}/${c.balance.turnsPerBlind}턴">${last?'마지막 턴':`${b.turn}<small>/${c.balance.turnsPerBlind}턴</small>`}</span><span class="hint ${selected?'card-tip':''}" id="hint">${hintText()}</span><span class="uses" aria-label="남은 붙이기 ${left}회">${Array.from({length:c.balance.attachLimit},(_,i)=>`<i class="${i<left?'on':''}"></i>`).join('')}</span></div>
+ const b=state.battle,left=limit()-b.actionsUsed,last=b.turn>=c.balance.turnsPerBlind;
+ return `<footer class="dock"><div class="hand-head"><span class="turn-chip ${last?'last':''}" aria-label="${b.turn}/${c.balance.turnsPerBlind}턴">${last?'마지막 턴':`${b.turn}<small>/${c.balance.turnsPerBlind}턴</small>`}</span><span class="hint ${selected?'card-tip':''}" id="hint">${hintText()}</span><span class="uses" aria-label="남은 붙이기 ${left}회">${Array.from({length:limit()},(_,i)=>`<i class="${i<left?'on':''}"></i>`).join('')}</span></div>
  <div class="hand">${b.hand.length?b.hand.map((card,i,arr)=>handCard(card,i,arr.length,left<=0)).join(''):'<p class="empty">손패가 없어요</p>'}</div>
  <div class="actions"><button type="button" class="deck-mini" data-action="deck" aria-label="덱 보기"><b>${b.drawPile.length}</b><small>${uiIcon('cards')} 남은 덱</small></button>${last?`<button type="button" class="go fight" data-action="end">전투! ${gem('+'+diamondsFor(b.turn))}</button>`:`<button type="button" class="go" data-action="end">턴 종료</button>${earlyFight(b)}`}</div></footer>`;
 }
 // 조기 전투: 지금 전투해도 목표를 넘을 때만 누를 수 있다. 남은 턴만큼 다이아몬드를 더 받는다.
 function earlyFight(b){
- const ok=projectedScore(state.run,b,c,state.run.team,true).score>=b.target;
+ const ok=projectedScore(state.run,b,c).score>=b.target;
  return `<button type="button" class="early" data-action="fight" ${ok?'':'disabled'} aria-label="조기 전투, 다이아몬드 ${diamondsFor(b.turn)}">${ok?'조기 전투':'목표 미달'}${gem('+'+diamondsFor(b.turn))}</button>`;
 }
 // 점수 연출 단계: 덧셈은 기초 한 번에 채우고, 배율이 들어가는 순간만 하나씩 보여준다(발라트로식).
 function stepItems(r){
  const items=[`<li class="add" data-add="${r.chips}">기초<b>+${number(r.chips)}</b></li>`];
- if(r.comboMultiplier!==1)items.push(`<li class="mul" data-mul="${r.comboMultiplier}" data-src="tray">페어·트리플 Lv<b>×${number(r.comboMultiplier)}</b></li>`);
- for(const e of r.effects.filter(x=>x.operation==='multiply'&&x.active&&x.amount!==1))items.push(`<li class="mul" data-mul="${e.amount}" data-unit="${e.sourceInstanceId}">${e.name}<b>×${number(e.amount)}</b></li>`);
- if(r.affinity.total!==1)items.push(`<li class="mul aff-step" data-mul="${r.affinity.total}">상성<b>×${number(r.affinity.total)}</b></li>`);
- if(r.targetBonus)items.push(`<li class="bonus" data-bonus="${r.targetBonus}">목표 보너스<b>+${r.targetBonus}</b></li>`);
+ if(r.affinity.average!==1)items.push(`<li class="mul aff-step" data-mul="${r.affinity.average}">상성 평균<b>×${number(r.affinity.average)}</b></li>`);
+ if(r.comboMultiplier!==1)items.push(`<li class="mul" data-mul="${r.comboMultiplier}" data-src="tray">족보 Lv<b>×${number(r.comboMultiplier)}</b></li>`);
+ for(const t of r.t4)items.push(`<li class="mul" data-mul="${t.multiplier}" data-src="tray">${t.name}${t.burst?' 폭발!':''}<b>×${number(t.multiplier)}</b></li>`);
  return items.join('');
 }
 function resolveDock(){
@@ -311,22 +306,24 @@ function openPop(key,anchor,html,hover=false){
  el.style.top=top+'px';el.classList.toggle('below',below);el.style.setProperty('--arrow',Math.max(14,Math.min(w-14,a.left+a.width/2-box.left-left))+'px');
  pop={key,el,hover,anchor};
 }
-const effValue=e=>e.operation==='multiply'?`×${number(e.amount)}`:e.operation==='targetPercent'?`최종 +목표의 ${number(e.amount)}%`:e.operation==='accumulate'?`턴 종료 시 +${number(e.amount)}`:`+${number(e.amount)}`;
 function unitPop(slot){
  const u=state.run.team.characters[slot],r=reading(),b=state.battle,rec=recipeFor(u,c),lv=rec?levelOf(state.run.levels,rec.id):0;
- const eff=rec&&r.effects.find(x=>x.sourceInstanceId===u.instanceId),rel=relationOf(u.elementId,b.elementId,c),aff=r.affinity.units.find(x=>x.instanceId===u.instanceId);
+ const t1=rec&&r.t1Units.find(x=>x.instanceId===u.instanceId),rel=relationOf(u.elementId,b.elementId,c),aff=r.affinity.units.find(x=>x.instanceId===u.instanceId);
  return `<b class="pop-title">${nameOf(u.characterDefId)}</b>
  ${u.starLevel?`<div class="pop-row">★ 별 Lv${u.starLevel}<em>+${u.starLevel*c.balance.starPower}</em></div>`:''}
  ${u.weaponId?`<div class="pop-row">${u.weaponPlus?`+${u.weaponPlus} `:''}${nameOf(u.weaponId)}<em>+${weaponPower(u,c)}</em></div>`:''}
  ${u.elementId?`<div class="pop-row">${nameOf(u.elementId)} Lv${u.elementLevel}${rel!=='neutral'?`<em class="${rel==='advantage'?'good':'bad'}">${rel==='advantage'?'▲ 유리':'▼ 불리'} ×${number(aff.multiplier)}</em>`:'<em>상성 무관</em>'}</div>`:''}
- ${rec?`<div class="pop-recipe ${eff?.active?'on':'off'}"><b>${rec.name} Lv${lv}</b><em>${eff?.active?effValue(eff):'조건 미충족'}</em><small>${effectDescription(rec,lv)}</small></div>`:''}
+ ${rec?`<div class="pop-recipe ${r.t1?'on':'off'}"><b>${rec.name} Lv${lv}</b><em>${r.t1?`+${number(t1.power)}`:'봉인됨'}</em><small>${effectDescription(rec,lv)}</small></div>`:''}
  ${!u.weaponId&&!u.elementId&&!u.starLevel?'<div class="pop-row dim">스티커를 붙여 키워 보세요</div>':''}
  <button type="button" class="pop-more" data-action="inspect-more" data-slot="${slot}">자세히</button>`;
 }
 function combosPop(){
- const r=reading(),ups=c.comboLevelKinds.filter(k=>levelOf(state.run.levels,k)>1);
- return `<b class="pop-title">페어 · 트리플 보너스 <em>+${number(r.combos)}</em></b>
- ${r.matches.length?r.matches.map(m=>`<div class="pop-row">${comboName(m)}<em>+${number(m.bonus)}</em></div>`).join(''):'<div class="pop-row dim">같은 종족·직업·무기·속성이 2명이면 페어, 3명이면 트리플, 모두 다르면 컬렉션이에요.</div>'}
+ const r=reading(),ups=c.comboLevelKinds.filter(k=>levelOf(state.run.levels,k)>1),tiers=[r.tiers.t2,r.tiers.t3].filter(Boolean);
+ return `<b class="pop-title">족보 · 조합 <em>+${number(r.combos+r.t2+r.t3)}</em></b>
+ ${r.matches.map(m=>`<div class="pop-row">${comboName(m)}<em>+${number(m.bonus)}</em></div>`).join('')}
+ ${tiers.map(t=>`<div class="pop-row">${t.name} (T${t.tier})<em>+${number(t.power)}</em></div>`).join('')}
+ ${r.t4.map(t=>`<div class="pop-row lv">${t.name} (T4)<em>×${number(t.multiplier)}</em></div>`).join('')}
+ ${!r.matches.length&&!tiers.length&&!r.t4.length?'<div class="pop-row dim">3명의 종족·직업·무기·속성이 모두 같으면 트리플, 모두 다르면 컬렉션이에요.</div>':''}
  ${ups.map(k=>`<div class="pop-row lv">${levelKindLabels[k]} Lv${levelOf(state.run.levels,k)}<em>성립마다 ×${number(1+c.balance.comboMultPerLevel*(levelOf(state.run.levels,k)-1))}</em></div>`).join('')}
  <button type="button" class="pop-more" data-action="combos-sheet">자세히</button>`;
 }
@@ -347,11 +344,11 @@ function saveTips(){try{localStorage.setItem(TIP_KEY,JSON.stringify([...seenTips
 const attaching=()=>state.phase==='attach'&&!intro;
 const tips=[
  {id:'goal',when:()=>attaching()&&state.battle.blindIndex===0&&state.battle.turn===1,text:`카드를 끌어 원정대에 붙여요. ${c.balance.turnsPerBlind}턴이 끝났을 때 점수가 목표를 넘으면 통과!`},
- {id:'combo',when:()=>attaching()&&reading().matches.length>0,text:'같은 종족·직업·무기·속성이 2명이면 페어, 3명이면 트리플! 아래 칸에 불이 켜지고 점수가 붙어요. 칸을 누르면 자세히 볼 수 있어요.'},
+ {id:'combo',when:()=>attaching()&&reading().matches.length>0,text:'3명의 종족·직업·무기·속성이 모두 같으면 트리플, 모두 다르면 컬렉션! 종족 조합과 직업 조합은 큰 점수를 줘요. 칸을 누르면 자세히 볼 수 있어요.'},
  {id:'element',when:()=>attaching()&&members(state.run.team).some(u=>u.elementId),text:'속성이 블라인드 속성을 이기면 ▲ 배율이 오르고, 지면 ▼ 내려가요. 같은 속성을 또 붙이면 Lv이 올라요.'},
- {id:'recipe',when:()=>attaching()&&members(state.run.team).some(u=>recipeFor(u,c)),text:'무기 + 속성 = 조합 무기! 불은 배율, 물은 기초 점수, 번개는 턴마다 쌓여요. ✗ 표시면 조건 미충족이에요. 캐릭터를 누르면 효과를 볼 수 있어요.'},
+ {id:'recipe',when:()=>attaching()&&members(state.run.team).some(u=>recipeFor(u,c)),text:'무기 + 속성 = 조합 무기! 붙이는 즉시 기초 점수가 올라요. 3명 모두 조합 무기를 갖추면 T4 원정대 효과에 도전할 수 있어요.'},
  {id:'enhance',when:()=>attaching()&&state.battle.hand.some(h=>h.stickerDefId&&members(state.run.team).some(u=>u.weaponId&&byId(c.stickers,h.stickerDefId).payloadId===u.weaponId)),text:'같은 무기를 든 캐릭터에게 무기를 또 붙이면 강화 +1! 무기 기초 점수가 올라요. 다른 무기를 붙이면 강화는 사라져요.'},
- {id:'early',when:()=>attaching()&&state.battle.turn<c.balance.turnsPerBlind&&projectedScore(state.run,state.battle,c,state.run.team,true).score>=state.battle.target,text:`벌써 목표를 넘었어요! 조기 전투로 끝내면 남은 턴마다 다이아몬드를 ${c.metaRules.diamondsPerTurnLeft}개씩 더 받아요. 더 키워도 되지만 남은 턴이 줄어요.`},
+ {id:'early',when:()=>attaching()&&state.battle.turn<c.balance.turnsPerBlind&&projectedScore(state.run,state.battle,c).score>=state.battle.target,text:`벌써 목표를 넘었어요! 조기 전투로 끝내면 남은 턴마다 다이아몬드를 ${c.metaRules.diamondsPerTurnLeft}개씩 더 받아요. 더 키워도 되지만 남은 턴이 줄어요.`},
  {id:'fight',when:()=>attaching()&&state.battle.turn===c.balance.turnsPerBlind,text:'마지막 턴! 전투를 누르면 점수가 목표를 넘는지 판정해요.'},
  {id:'reward',when:()=>state.phase==='reward_reveal',text:'원하는 카드를 봐 두세요. 섞는 동안 눈으로 쫓아가면 그 카드를 가질 수 있어요!'},
 ];
@@ -365,7 +362,7 @@ function pickTip(){
 function dismissTip(){if(activeTip){seenTips.add(activeTip.id);saveTips();activeTip=null;}render();}
 // 첫 블라인드 1~2턴: 점수가 가장 오르는 카드와 자리를 반짝여, 따라만 해도 첫 족보를 경험하게 한다.
 function suggestion(){
- const b=state.battle;if(!attaching()||b.blindIndex!==0||b.turn>2||selected||b.actionsUsed>=c.balance.attachLimit)return null;
+ const b=state.battle;if(!attaching()||b.blindIndex!==0||b.turn>2||selected||b.actionsUsed>=limit())return null;
  const base=reading().score;let best=null;
  for(const card of b.hand)for(let slot=0;slot<c.balance.teamSize;slot++){const pv=previewFor(slot,card.instanceId);if(pv.reason)continue;const d=pv.reading.score-base;if(!best||d>best.d)best={card:card.instanceId,slot,d};}
  return best&&best.d>0?best:null;
@@ -428,7 +425,6 @@ function afterRender(f){
   const big=f.recipe?`${f.recipe}!`:f.newBig?`${comboLabels[f.newBig]}!`:null;if(big)burst(big);
   flyCard(f.cardSnapshot,el);particles(el);
  }
- if(f.accumulated){const acc=document.getElementById('acc');if(acc){bump(acc,true);floatText(acc,'+'+number(f.accumulated.gain),'up');}}
  if(f.turnStart&&state.phase==='attach'){
   app.querySelector('.hand')?.classList.add('dealing');
   const b=state.battle;
@@ -556,22 +552,28 @@ function showRules(){const t=c.balance;openInfo(`<h2>원정 규칙</h2><ol>
 <li>원정은 블라인드 ${c.blinds.length}개. 블라인드마다 ${t.turnsPerBlind}턴을 진행하고, 마지막 턴이 끝나면 점수가 목표 이상인지 판정해요. 못 넘기면 원정이 끝나요.</li>
 <li><b>조기 전투</b>: 점수가 이미 목표를 넘었으면 아무 턴에나 전투할 수 있어요. 이기면 다이아몬드 ${c.metaRules.clearDiamonds}개, 남은 턴마다 ${c.metaRules.diamondsPerTurnLeft}개를 더 받아요.</li>
 <li><b>보스</b>: 마지막 블라인드의 보스는 규칙 하나(${c.bossRules.map(r=>r.name).join('·')} 중)를 걸어요. 보스가 등장할 때 공개돼요.</li>
-<li>매 턴 손패 ${t.handSize}장을 받고 최대 ${t.attachLimit}번 붙여요. 남은 카드는 턴 종료 때 버려져요.</li>
+<li>매 턴 손패 ${t.handSize}장을 받고 최대 ${t.attachLimit}번 붙여요(진형 T4가 성립하면 +1). 남은 카드는 턴 종료 때 버려져요.</li>
 <li>${guaranteedText()} 캐릭터 카드가 꼭 나오고, 다른 턴에도 가끔 나와요. 빈 자리에 놓거나 교체할 수 있고, 교체해도 스티커와 레벨은 옮겨져요.</li>
 <li><b>별</b>: 붙일 때마다 Lv+1. 캐릭터 기초 점수가 Lv당 +${t.starPower}.</li>
 <li><b>속성</b>: 같은 속성을 붙이면 Lv+1, 다른 속성을 붙이면 교체되고 Lv1부터 다시 시작해요.</li>
-<li><b>무기</b>: 기초 +${t.weaponPower}. 같은 무기를 또 붙이면 강화 +1(기초 +${t.weaponPlusPower}씩), 다른 무기를 붙이면 교체되고 강화는 +0부터. 무기와 속성이 함께 있으면 조합 무기가 돼요.</li>
-<li><b>상성</b>: ${cycleText()}. 블라인드 속성을 이기면 ×(1+${t.affinityPerLevel}×속성Lv), 지면 그만큼 나눠요.</li>
-<li>점수는 <b>기초 × 배율</b>. 기초는 캐릭터·무기·별·페어/트리플 보너스·물 조합 효과·누적의 합, 배율은 페어/트리플 레벨·불 조합 효과·상성을 곱한 값이에요.</li>
+<li><b>무기</b>: 기초 +${t.weaponPower}. 같은 무기를 또 붙이면 강화 +1(기초 +${t.weaponPlusPower}씩), 다른 무기를 붙이면 교체되고 강화는 +0부터. 무기와 속성이 함께 있으면 조합 무기(T1, +${t.t1Power} × 레시피 Lv)가 돼요.</li>
+<li><b>종족·직업 조합</b>: 3명의 종족이 모두 같거나 모두 다르면 T2, 직업이 그러면 T3. 원정대에 한 번 더해져요.</li>
+<li><b>T4</b>: 3명 모두 조합 무기가 있고 종족·직업 조합과 추가 조건을 맞추면 성립해요. 점수 전체에 배율이 곱해지고, 여러 개가 함께 성립할 수 있어요.</li>
+<li><b>상성</b>: ${cycleText()}. 블라인드 속성을 이기면 ×(1+${t.affinityPerLevel}×속성Lv), 지면 그만큼 나눠요. 원정대에는 3명의 평균이 곱해져요.</li>
+<li>점수는 <b>기초 × 배율</b>. 기초는 캐릭터·무기·별·조합 무기·족보 보너스·종족 조합·직업 조합의 합, 배율은 상성 평균·족보 레벨·T4를 곱한 값이에요.</li>
 <li>원정대는 블라인드가 바뀌어도 그대로예요. 블라인드를 넘기면 보상 카드 3장을 섞어 1장을 뽑아요.</li></ol><p class="note">현재 수치는 재미와 균형 확인용 임시값입니다.</p><button type="button" class="ghost help-tips" data-help="tips">처음 안내 다시 보기</button>`);}
-function showAffinity(){openInfo(`<h2>상성</h2><p>${cycleText()}. 캐릭터마다 블라인드 속성과 비교해요.</p><table class="table"><tr><td>유리 ▲</td><td>×(1 + ${c.balance.affinityPerLevel} × 속성 Lv)</td></tr><tr><td>불리 ▼</td><td>÷(1 + ${c.balance.affinityPerLevel} × 속성 Lv)</td></tr><tr><td>무관</td><td>×1</td></tr></table><p class="note">다음 블라인드 속성은 미리 알려줘요. 그때 불리해질 캐릭터에는 ! 표시가 붙어요.</p>`);}
+function showAffinity(){openInfo(`<h2>상성</h2><p>${cycleText()}. 캐릭터마다 블라인드 속성과 비교해요.</p><table class="table"><tr><td>유리 ▲</td><td>×(1 + ${c.balance.affinityPerLevel} × 속성 Lv)</td></tr><tr><td>불리 ▼</td><td>÷(1 + ${c.balance.affinityPerLevel} × 속성 Lv)</td></tr><tr><td>무관</td><td>×1</td></tr></table><p class="note">원정대 점수에는 3명의 상성 배율 평균이 곱해져요.</p>`);}
 function showCombos(){
- const lv=k=>levelOf(state.run?.levels,k),row=(kind,desc,axisBonus,starBonus)=>`<tr><td>${comboLabels[kind]}</td><td>${desc}</td><td>+${axisBonus} · 별 +${starBonus}×Lv</td></tr>`;
- const bonus=(axis,kind)=>c.combos.find(r=>r.axis===axis&&r.kind===kind).flatPowerBonus;
- openInfo(`<h2>페어 · 트리플 · 컬렉션</h2><p>종족·직업·무기·속성·별 5개 항목을 3명 기준으로 비교해요. 항목마다 가장 높은 것 하나만 적용되고, 성립한 칸은 불이 켜져요. 별은 레벨로 비교해요.</p><table class="table">${row('pair','같은 값 2명',bonus('race','pair'),bonus('star','pair'))}${row('collection','3명 모두 다름 (별은 연속 Lv = 스트레이트)',bonus('race','collection'),bonus('star','straight'))}${row('triple','3명 모두 같음',bonus('race','triple'),bonus('star','triple'))}</table>
- <h3 class="sheet-h">레벨</h3><p>보상으로 페어·컬렉션·트리플 레벨을 올려요. Lv이 오르면 보너스가 ×Lv, 그 종류가 성립할 때마다 배율 ×(1+${c.balance.comboMultPerLevel}×(Lv−1)).</p><table class="table">${c.comboLevelKinds.map(k=>`<tr><td>${levelKindLabels[k]}</td><td>Lv${lv(k)}</td></tr>`).join('')}</table><p class="note">빈 칸과 별 Lv0은 판정에서 빠져요.</p>`);
+ const lv=k=>levelOf(state.run?.levels,k),bonus=(axis,kind)=>c.combos.find(r=>r.axis===axis&&r.kind===kind).flatPowerBonus;
+ const tier=(axis,kind)=>c.tierCombos.find(t=>t.axis===axis&&t.kind===kind).power;
+ openInfo(`<h2>족보 · 조합</h2><p>3명 기준으로 모두 같으면 트리플, 모두 다르면 컬렉션이에요. 2명만 같으면 성립하지 않아요.</p><table class="table">
+ <tr><td>무기·속성 족보</td><td>컬렉션 +${bonus('weapon','collection')} · 트리플 +${bonus('weapon','triple')}</td></tr>
+ <tr><td>종족 조합 (T2)</td><td>컬렉션 +${tier('race','collection')} · 트리플 +${tier('race','triple')}</td></tr>
+ <tr><td>직업 조합 (T3)</td><td>컬렉션 +${tier('job','collection')} · 트리플 +${tier('job','triple')}</td></tr></table>
+ <h3 class="sheet-h">T4 원정대 효과</h3><table class="table">${c.t4Rules.map(r=>`<tr><td>${r.name} ×${r.multiplier}</td><td>${r.text}</td></tr>`).join('')}</table>
+ <h3 class="sheet-h">레벨</h3><p>보상으로 무기·속성 족보의 컬렉션·트리플 레벨을 올려요. Lv이 오르면 보너스가 ×Lv, 성립할 때마다 배율 ×(1+${c.balance.comboMultPerLevel}×(Lv−1)).</p><table class="table">${c.comboLevelKinds.map(k=>`<tr><td>${levelKindLabels[k]}</td><td>Lv${lv(k)}</td></tr>`).join('')}</table>`);
 }
-function showRecipes(){openInfo(`<h2>조합 무기</h2><p>무기와 속성을 같은 캐릭터에 붙이면 조합 무기가 돼요. 불은 배율, 물은 기초 점수, 번개는 턴마다 누적. 레벨은 보상으로 올려요.</p><div class="recipe-list">${c.weaponRecipes.map(r=>{const lv=levelOf(state.run?.levels,r.id);return `<article>${ic(r.assetId,'recipe-art')}<b>${r.name} <small>Lv${lv}</small></b><small>${nameOf(r.weaponId)} + ${nameOf(r.elementId)}</small><p>${effectDescription(r,lv)}</p></article>`;}).join('')}</div>`);}
+function showRecipes(){openInfo(`<h2>조합 무기</h2><p>무기와 속성을 같은 캐릭터에 붙이면 조합 무기(T1)가 돼요. 조건 없이 기초 점수가 오르고, 레벨은 보상으로 올려요.</p><div class="recipe-list">${c.weaponRecipes.map(r=>{const lv=levelOf(state.run?.levels,r.id);return `<article>${ic(r.assetId,'recipe-art')}<b>${r.name} <small>Lv${lv}</small></b><small>${nameOf(r.weaponId)} + ${nameOf(r.elementId)}</small><p>${effectDescription(r,lv)}</p></article>`;}).join('')}</div>`);}
 function inspect(slot){
  const u=state.run.team.characters[slot];if(!u)return;
  const d=byId(c.characters,u.characterDefId),rec=recipeFor(u,c),b=state.battle,rel=relationOf(u.elementId,b.elementId,c);
@@ -580,10 +582,9 @@ function inspect(slot){
 function showBreakdown(){
  const r=reading(),b=state.battle;
  openInfo(`<h2>점수 계산</h2><p class="sub">${state.phase==='attach'?'지금 전투하면 이렇게 계산돼요.':'이번 블라인드의 확정 점수예요.'}</p><table class="table">
- <tr><td>캐릭터·무기·별</td><td>${r.base+r.weapons+r.stars}</td></tr><tr><td>페어·트리플 보너스</td><td>+${number(r.combos)}</td></tr><tr><td>물 조합 효과</td><td>+${number(r.flat)}</td></tr><tr><td>누적</td><td>+${number(r.accumulated)}</td></tr><tr><td><b>기초</b></td><td><b>${number(r.chips)}</b></td></tr>
- <tr><td>페어·트리플 레벨 배율</td><td>×${number(r.comboMultiplier)}</td></tr><tr><td>불 조합 효과 배율</td><td>×${number(r.effectMultiplier)}</td></tr><tr><td>상성 배율</td><td>×${number(r.affinity.total)}</td></tr><tr><td><b>배율</b></td><td><b>×${number(r.multiplier)}</b></td></tr>
- <tr><td>목표 보너스</td><td>+${r.targetBonus}</td></tr><tr><td><b>점수</b> / 목표</td><td><b>${r.score}</b> / ${b.target}</td></tr></table>
- ${r.effects.length?`<p class="note">${r.effects.map(e=>`${e.name} Lv${e.level}: ${e.active?(e.operation==='multiply'?'×':e.operation==='accumulate'?'턴 종료 시 +':'+')+number(e.amount)+(e.operation==='targetPercent'?'%':''):'조건 미충족'}`).join('<br>')}</p>`:''}`);
+ <tr><td>캐릭터·무기·별</td><td>${r.base+r.weapons+r.stars}</td></tr><tr><td>조합 무기 (T1)</td><td>+${number(r.t1)}</td></tr><tr><td>족보 보너스</td><td>+${number(r.combos)}</td></tr><tr><td>종족 조합 (T2)</td><td>+${number(r.t2)}</td></tr><tr><td>직업 조합 (T3)</td><td>+${number(r.t3)}</td></tr><tr><td><b>기초</b></td><td><b>${number(r.chips)}</b></td></tr>
+ <tr><td>상성 평균</td><td>×${number(r.affinity.average)}</td></tr><tr><td>족보 레벨 배율</td><td>×${number(r.comboMultiplier)}</td></tr><tr><td>T4 ${r.t4.map(t=>t.name).join(' · ')||'없음'}</td><td>×${number(r.t4Multiplier)}</td></tr><tr><td><b>배율</b></td><td><b>×${number(r.multiplier)}</b></td></tr>
+ <tr><td><b>점수</b> / 목표</td><td><b>${r.score}</b> / ${b.target}</td></tr></table>`);
 }
 function showDeck(){const groups=new Map();state.run.deckDefIds.forEach(id=>groups.set(id,(groups.get(id)??0)+1));openInfo(`<h2>덱 ${state.run.deckDefIds.length}장</h2><p class="sub">원정 내내 같은 덱이에요. 남은 덱 ${state.battle.drawPile.length}장.</p><table class="table">${[...groups].map(([id,n])=>`<tr><td>${nameOf(byId(c.stickers,id).nameKey)}</td><td>${n}장</td></tr>`).join('')}</table>`);}
 
@@ -607,7 +608,7 @@ app.addEventListener('click',e=>{
  case 'affinity':if(state.battle)togglePop('element',el,elementPop);else showAffinity();break;
  case 'breakdown':if(!selected)showBreakdown();break;
  case 'start':command('StartRun',{seed:crypto.getRandomValues(new Uint32Array(1))[0]});break;
- case 'select':if(state.battle.actionsUsed>=c.balance.attachLimit){toast(messages.limit);return;}selected=selected===el.dataset.card?null:el.dataset.card;render();break;
+ case 'select':if(state.battle.actionsUsed>=limit()){toast(messages.limit);return;}selected=selected===el.dataset.card?null:el.dataset.card;render();break;
  case 'attach':{if(state.phase!=='attach')break;const slot=Number(el.dataset.slot),u=state.run.team.characters[slot];if(selected){closePop();attach(slot);}else if(u)togglePop('unit'+slot,el,()=>unitPop(slot));else toast('캐릭터 카드를 놓을 자리예요.');break;}
  case 'end':command('EndTurn');break;
  case 'fight':command('EndTurn',{fight:true});break;
@@ -621,7 +622,7 @@ app.addEventListener('click',e=>{
  case 'deck':showDeck();break;
  }
 });
-app.addEventListener('pointerdown',e=>{const el=e.target.closest('[data-action="select"]');if(!el||e.button!==0||state.phase!=='attach'||state.battle.actionsUsed>=c.balance.attachLimit)return;pointer={id:e.pointerId,x:e.clientX,y:e.clientY,card:el.dataset.card,html:el.outerHTML,dragging:false};});
+app.addEventListener('pointerdown',e=>{const el=e.target.closest('[data-action="select"]');if(!el||e.button!==0||state.phase!=='attach'||state.battle.actionsUsed>=limit())return;pointer={id:e.pointerId,x:e.clientX,y:e.clientY,card:el.dataset.card,html:el.outerHTML,dragging:false};});
 document.addEventListener('pointermove',e=>{
  if(!pointer||pointer.id!==e.pointerId)return;
  if(!pointer.dragging&&Math.hypot(e.clientX-pointer.x,e.clientY-pointer.y)>7){pointer.dragging=true;app.setPointerCapture(e.pointerId);selected=pointer.card;render();ghost=document.createElement('div');ghost.className='dragghost';ghost.innerHTML=pointer.html;document.body.append(ghost);paintDefs(ghost);}

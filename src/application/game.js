@@ -1,26 +1,24 @@
 modules["src/application/game.mjs"]=(()=>{
 const {byId}=modules["src/content/data.mjs"];
-const {makeUnit,attachUnit,attachmentReason,activeCombos,recipeFor,scoreTeam,turnEndGain,shuffle,weightedPick,drawCards,nextRandom}=modules["src/domain/rules.mjs"];
+const {makeUnit,attachUnit,attachmentReason,activeCombos,recipeFor,scoreTeam,activeT4,attachBonusOf,sealOf,shuffle,weightedPick,drawCards,nextRandom}=modules["src/domain/rules.mjs"];
 
 // 흐름: title → (블라인드마다) attach 최대 6턴(언제든 조기 전투) → resolve → reward_reveal → reward_pick → reward_done → 다음 블라인드
 //       목표 미달이거나 마지막 블라인드를 넘기면 run_result.
 const initialState=()=>({phase:'title',run:null,battle:null,reward:null,appliedCommandIds:[],events:[],history:[]});
-const progressOf=run=>({levels:run.levels,accumulated:run.accumulated});
 const blindOf=(b)=>({target:b.target,elementId:b.elementId,ruleId:b.ruleId??null});
-// 지금 전투하면 판정될 점수. 전투(마지막 턴 또는 조기 전투)는 턴 종료 누적이 판정 직전에 더해지므로 미리 포함한다.
-// 화면의 예상 점수와 EndTurn의 판정이 같은 함수를 쓴다. team을 주면 그 편성으로 계산한다(미리보기용).
-function projectedScore(run,b,c,team=run.team,fight=false){
- const gain=fight||b.turn>=c.balance.turnsPerBlind?turnEndGain(team,progressOf(run),c,blindOf(b)):0;
- return scoreTeam(team,blindOf(b),{levels:run.levels,accumulated:run.accumulated+gain},c);
-}
+// 지금 전투하면 판정될 점수. 화면의 예상 점수와 EndTurn의 판정이 같은 함수를 쓴다. team을 주면 그 편성으로 계산한다(미리보기용).
+// opts.burst는 판정 때만 굴린다. 미리보기는 확률 효과를 쓰지 않는다.
+function projectedScore(run,b,c,team=run.team,opts={}){return scoreTeam(team,blindOf(b),{levels:run.levels},c,opts);}
+// 이번 턴 붙이기 한도: 기본 + 지금 성립한 T4의 보너스(진형 등).
+function attachLimitFor(state,c){return c.balance.attachLimit+attachBonusOf(state.run.team,c);}
 function validateAttachment(state,command,c){
- const b=state.battle;if(state.phase!=='attach'||!b)return 'phase';if(b.actionsUsed>=c.balance.attachLimit)return 'limit';
+ const b=state.battle;if(state.phase!=='attach'||!b)return 'phase';if(b.actionsUsed>=attachLimitFor(state,c))return 'limit';
  const card=b.hand.find(x=>x.instanceId===command.stickerInstanceId);if(!card||!card.stickerDefId)return 'card';
  return attachmentReason(state.run.team.characters.find(u=>u?.instanceId===command.targetInstanceId),byId(c.stickers,card.stickerDefId),c);
 }
 // 빈 자리 배치와 교체 모두 언제나 가능하고 붙이기 1회를 쓴다.
 function validatePlacement(state,command,c){
- const b=state.battle;if(state.phase!=='attach'||!b)return 'phase';if(b.actionsUsed>=c.balance.attachLimit)return 'limit';
+ const b=state.battle;if(state.phase!=='attach'||!b)return 'phase';if(b.actionsUsed>=attachLimitFor(state,c))return 'limit';
  const card=b.hand.find(x=>x.instanceId===command.cardInstanceId);if(!card||!card.characterDefId)return 'card';
  const slot=command.targetSlot;if(!Number.isInteger(slot)||slot<0||slot>=c.balance.teamSize)return 'target';
  const cur=state.run.team.characters[slot];
@@ -31,8 +29,10 @@ function validatePlacement(state,command,c){
 function placeUnit(old,slot,defId){const unit=makeUnit(`unit_${slot}`,defId);return old?{...unit,weaponId:old.weaponId,weaponPlus:old.weaponPlus??0,elementId:old.elementId,elementLevel:old.elementLevel,starLevel:old.starLevel}:unit;}
 function beginTurn(s,c){
  const b=s.battle;b.turn++;b.actionsUsed=0;
- let charTurn=c.characterRules.guaranteedTurns[b.blindIndex].includes(b.turn);
- if(!charTurn){const r=nextRandom(b.rngState);b.rngState=r.seed;charTurn=r.value<c.characterRules.randomChance;}
+ // 보스 규칙 캐릭터 동결: 캐릭터 카드가 나오지 않는다.
+ const frozen=sealOf({ruleId:b.ruleId},c)==='freezeCharacters';
+ let charTurn=!frozen&&c.characterRules.guaranteedTurns[b.blindIndex].includes(b.turn);
+ if(!charTurn&&!frozen){const r=nextRandom(b.rngState);b.rngState=r.seed;charTurn=r.value<c.characterRules.randomChance;}
  drawCards(b,c.balance.handSize-(charTurn?1:0));
  if(charTurn){const r=nextRandom(b.rngState);b.rngState=r.seed;const def=c.characters[Math.floor(r.value*c.characters.length)];b.hand.unshift({instanceId:`${b.blindId}:char:${b.turn}`,characterDefId:def.id});}
  s.phase='attach';s.events.push({type:'TurnStarted',turn:b.turn});
@@ -76,7 +76,7 @@ function applyCommand(state,cmd,c){
   const seed=cmd.seed>>>0||1;let rng=seed;
   const blindElements=c.blinds.map(()=>{const r=nextRandom(rng);rng=r.seed;return c.elements[Math.floor(r.value*c.elements.length)].id;});
   const rr=nextRandom(rng);rng=rr.seed;const bossRuleId=c.bossRules[Math.floor(rr.value*c.bossRules.length)].id;
-  s.run={schemaVersion:5,contentVersion:c.version,runId:`run_${seed}`,seed,rngState:rng,blindIndex:0,blindElements,bossRuleId,diamonds:0,team:{characters:Array(c.balance.teamSize).fill(null)},levels:{},accumulated:0,deckDefIds:[...c.initialDeck],result:null};
+  s.run={schemaVersion:6,contentVersion:c.version,runId:`run_${seed}`,seed,rngState:rng,blindIndex:0,blindElements,bossRuleId,diamonds:0,team:{characters:Array(c.balance.teamSize).fill(null)},levels:{},deckDefIds:[...c.initialDeck],result:null};
   s.history=[];startBlind(s,c);break;
  }
  case 'AttachSticker':{
@@ -101,9 +101,10 @@ function applyCommand(state,cmd,c){
   // fight: 마지막 턴이 아니어도 지금 전투한다(조기 전투). 남은 턴은 다이아몬드 보너스가 된다.
   if(s.phase!=='attach')return fail('phase');
   const b=s.battle,r=s.run,last=b.turn>=c.balance.turnsPerBlind||cmd.fight===true;
-  // 전투는 누적을 더하기 전 상태로 판정 점수를 구한다(projectedScore가 누적을 포함한다).
-  const res=last?projectedScore(r,b,c,r.team,true):null,gain=turnEndGain(r.team,progressOf(r),c,blindOf(b));
-  if(gain>0){r.accumulated+=gain;s.events.push({type:'Accumulated',gain,total:r.accumulated});}
+  // 판정 때 확률 효과(운명의 일족)를 블라인드 RNG로 한 번 굴린다. 같은 시드면 같은 결과.
+  let burst=false;
+  if(last){const chance=activeT4(r.team,c).find(x=>x.chance);if(chance){const rr=nextRandom(b.rngState);b.rngState=rr.seed;burst=rr.value<chance.chance;s.events.push({type:'T4Rolled',ruleId:chance.id,burst});}}
+  const res=last?projectedScore(r,b,c,r.team,{burst}):null;
   b.discardPile.push(...b.hand.filter(x=>x.stickerDefId));b.hand=[];
   if(!last){s.events.push({type:'TurnEnded',turn:b.turn});beginTurn(s,c);break;}
   // 마지막 턴: 목표 점수 판정.
@@ -138,4 +139,4 @@ function applyCommand(state,cmd,c){
  s.appliedCommandIds.push(cmd.commandId);return {state:s,error:null,events:s.events};
 }
 
-return {initialState,projectedScore,applyCommand};})();
+return {initialState,projectedScore,attachLimitFor,applyCommand};})();

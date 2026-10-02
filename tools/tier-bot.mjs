@@ -1,4 +1,6 @@
 // 티어 구조(T1-T4) 측정용 봇. 실행: node tools/tier-bot.mjs [판수=400]
+// 콘텐츠 덮어쓰기: TIER='{"characterRules":{"guaranteedTurns":[[1,2,3],[],[],[]],"randomChance":0.1}}' node tools/tier-bot.mjs
+// 정책 고르기: POLICIES=greedy,t4_rebels node tools/tier-bot.mjs
 // 정책: random(무작위), greedy(지금 점수가 가장 높은 선택), T4 전용 봇 5종(해당 T4 조건에 다가가는 선택을 우선, 동점이면 점수).
 // 목표 점수를 1로 두고 끝까지 진행해 블라인드별 점수를 모은다. 봇의 결정은 목표와 무관하므로,
 // 현재 목표 곡선의 누적 클리어율은 "첫 미달 전까지 모두 목표 이상"인 비율과 같다.
@@ -8,6 +10,7 @@ const { data, rules, game } = loadModules();
 const N = Number(process.argv[2] ?? 400);
 const targets = data.blinds.map(b => b.target);
 const open = structuredClone(data.content); open.blinds.forEach(b => { b.target = 1; });
+Object.assign(open, JSON.parse(process.env.TIER ?? '{}'));
 
 const charOf = u => data.byId(data.content.characters, u.characterDefId);
 const maxSame = vs => vs.length ? Math.max(...Object.values(vs.reduce((m, v) => (m[v] = (m[v] ?? 0) + 1, m), {}))) : 0;
@@ -77,7 +80,8 @@ const pct = (a, p) => [...a].sort((x, y) => x - y)[Math.floor(p * a.length)];
 const share = (n) => `${(n / N * 100).toFixed(0)}%`;
 const summary = {};
 console.log(`${N}판씩. 성립률은 블라인드 3 판정 시점. 클리어율은 현재 목표 ${targets.join(' / ')} 기준 누적.`);
-for (const [name, policy] of Object.entries(policies)) {
+const only = process.env.POLICIES?.split(',');
+for (const [name, policy] of Object.entries(policies).filter(([k]) => !only || only.includes(k))) {
   const scores = targets.map(() => []), clear = targets.map(() => 0), t4 = {}, t2 = {}, t3 = {};
   let t1Full = 0;
   for (let seed = 1; seed <= N; seed++) {

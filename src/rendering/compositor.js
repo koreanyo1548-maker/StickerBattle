@@ -1,6 +1,6 @@
 modules["src/rendering/compositor.mjs"]=(()=>{
 const {byId}=modules["src/content/data.mjs"];
-const {recipeFor}=modules["src/domain/rules.mjs"];
+const {skillOf}=modules["src/domain/rules.mjs"];
 
 const cache=new Map(),images=new Map();
 const surface=()=>{const cv=document.createElement('canvas');cv.width=512;cv.height=512;return cv;};
@@ -8,18 +8,19 @@ const renderRequests=new WeakMap();
 const CACHE_LIMIT=96;
 const starTier=lv=>lv>=5?3:lv>=3?2:lv>=1?1:0;
 // 무기 광채는 속성 Lv2부터, Lv4에서 최대.
-const glowLevel=u=>u.weaponId&&u.elementId?Math.min(u.elementLevel,4):0;
+// 스킬이 생기면 광채가 켜지고, 레벨이 오를수록 강해진다(최대 4).
+const glowLevel=u=>u.weaponId&&u.elementId?Math.min(2+Math.floor(((u.level??1)-1)/4),4):0;
 // 무기 강화 빛은 +1부터, +5에서 최대.
 const plusGlow=u=>u.weaponId?Math.min(u.weaponPlus??0,5):0;
 function composeVisual(unit,c){
  const def=byId(c.characters,unit.characterDefId),profile=c.visuals[def.visualProfileId];
- const recipe=recipeFor(unit,c);
+ const recipe=skillOf(unit,c);
  const entries={body:profile.bodyAssetId,weapon:unit.weaponId?(recipe?.assetId??byId(c.weapons,unit.weaponId).assetId):null,hand:profile.frontHandAssetId,element:unit.elementId?byId(c.elements,unit.elementId).assetId:null};
  const result=profile.layerOrder.filter(layer=>entries[layer]).map(layer=>({layer,asset:c.assets[entries[layer]],anchor:profile.anchors[layer],unit,def}));
  const ornament=(layer,id,anchor,scale)=>({layer,asset:{...c.assets[id],scale:scale*1254/c.assets[id].sourceRect[2]},anchor,unit,def});
  // 신체 원화 좌표 기준 부착점. 종족·직업별 보정은 아트 테이블에서 관리한다.
  // 별 Lv 구간: 1 이상 배지, 3 이상 어깨 장식, 5 이상 후면 문장.
- const pose=profile.rankPose,tier=starTier(unit.starLevel);
+ const pose=profile.rankPose,tier=starTier((unit.level??1)-1);
  if(tier>=3)result.unshift(ornament('crest','asset_rank_crest',pose.crest,pose.crestSize/1254));
  const bodyEnd=result.findIndex(e=>e.layer==='body')+1;
  const front=[];

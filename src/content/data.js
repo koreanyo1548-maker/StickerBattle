@@ -23,13 +23,13 @@ const combos=comboAxes.flatMap(axis=>[
  {kind:'collection',levelKind:'collection',threshold:3,priority:2,bonus:10},
  {kind:'triple',levelKind:'triple',threshold:3,priority:3,bonus:15}
 ].map(r=>({id:`combo_${axis}_${r.kind}`,axis,kind:r.kind,levelKind:r.levelKind,threshold:r.threshold,priority:r.priority,flatPowerBonus:r.bonus,exclusiveGroup:axis})));
-// 티어. 모두 덧셈은 T1(캐릭터, 10 단위)·T2(종족 조합, 100 단위)·T3(직업 조합, 1000 단위), 곱셈은 T4.
-// T2·T3는 원정대에 한 번만 더한다. 같은 티어 안의 수치는 성립률 측정 후 조정한다(임시 시작값).
+// 티어. T1(캐릭터 조합 무기)은 기초에 더하고, T2(종족 조합)·T3(직업 조합)·T4는 점수 전체에 곱한다.
+// 아래 티어를 덮어쓰지 않고 키우도록 위로 갈수록 배율이 크다. 같은 티어 안의 수치는 성립률 측정 후 조정한다(임시 시작값).
 const tierCombos=[
- {id:'tier_race_collection',tier:2,axis:'race',kind:'collection',power:100,name:'종족 컬렉션'},
- {id:'tier_race_triple',tier:2,axis:'race',kind:'triple',power:200,name:'종족 트리플'},
- {id:'tier_job_collection',tier:3,axis:'job',kind:'collection',power:1000,name:'직업 컬렉션'},
- {id:'tier_job_triple',tier:3,axis:'job',kind:'triple',power:2000,name:'직업 트리플'}
+ {id:'tier_race_collection',tier:2,axis:'race',kind:'collection',multiplier:1.5,name:'종족 컬렉션'},
+ {id:'tier_race_triple',tier:2,axis:'race',kind:'triple',multiplier:2,name:'종족 트리플'},
+ {id:'tier_job_collection',tier:3,axis:'job',kind:'collection',multiplier:2,name:'직업 컬렉션'},
+ {id:'tier_job_triple',tier:3,axis:'job',kind:'triple',multiplier:3,name:'직업 트리플'}
 ];
 // 직업-무기 짝. 상시 보너스는 없고 T4 조건(일치·불일치) 판정에만 쓴다.
 const jobWeapon={job_warrior:'weapon_sword',job_archer:'weapon_bow',job_mage:'weapon_staff'};
@@ -60,7 +60,7 @@ const visuals={};
 characters.forEach(c=>{visuals[c.visualProfileId]={id:c.visualProfileId,rigId:rig.id,bodyAssetId:asset(`${c.id}_body`),frontHandAssetId:asset(`${c.id}_hand`,{x:712,y:636}),anchors:rig.anchors,layerOrder:rig.layerOrder};});
 weapons.forEach(w=>asset(w.assetId,{x:712,y:636}));elements.forEach(e=>asset(e.assetId,{x:772,y:316}));asset('asset_star');[...races,...jobs].forEach(d=>asset(d.iconAssetId));asset('asset_background');
 // 블라인드: 목표 점수 하나. 속성은 런 시작 때 시드로 정한다. 몬스터 그림은 아직 없어 속성 아이콘으로 대신한다.
-const blinds=[120,600,2000,7000].map((target,i,a)=>({id:`blind_${i+1}`,target,boss:i===a.length-1}));
+const blinds=[100,350,800,2500].map((target,i,a)=>({id:`blind_${i+1}`,target,boss:i===a.length-1}));
 // 일반 블라인드는 블라인드 속성의 몬스터, 보스 블라인드는 bossMonsterId. 보스 속성도 시드로 정한다.
 const monsters=[...elements.map(e=>({id:`monster_${e.id.slice(8)}`,elementId:e.id})),{id:'monster_boss',elementId:null}].map(m=>({...m,nameKey:m.id,assetId:asset(`asset_${m.id}`)}));
 const bossMonsterId='monster_boss';
@@ -75,14 +75,14 @@ const affinity={beats:{element_fire:'element_lightning',element_lightning:'eleme
 // 블라인드 사이 보상: 앞면 3장 공개 → 뒤집어 섞기 → 1장 선택. 후보는 보유한 레시피 각각과 족보 종류 3개.
 // swaps는 보상 차례(블라인드 1·2·3 이후)별 섞기 교체 횟수.
 // 보스 규칙: 보스 블라인드에 하나. 런 시작 때 시드로 정하고, 보스 블라인드가 시작될 때 공개한다.
-// seal: weapon·t1·star·t2·t3는 해당 점수를 0으로(T4 조건 판정에는 영향 없음), invertAffinity는 유리·불리 반전, freezeCharacters는 캐릭터 카드 없음.
+// seal: weapon·t1·star는 해당 점수를 0으로, t2·t3는 해당 배율을 ×1로(T4 조건 판정에는 영향 없음), invertAffinity는 유리·불리 반전, freezeCharacters는 캐릭터 카드 없음.
 const bossSeals=['weapon','t1','star','t2','t3','invertAffinity','freezeCharacters'];
 const bossRules=[
  {id:'rule_seal_weapon',seal:'weapon',name:'무기 봉인',text:'무기 기초 점수(강화 포함)가 0이 돼요'},
  {id:'rule_seal_t1',seal:'t1',name:'조합 무기 봉인',text:'조합 무기(T1) 점수가 0이 돼요'},
  {id:'rule_seal_star',seal:'star',name:'별 봉인',text:'별 기초 점수가 0이 돼요'},
- {id:'rule_seal_t2',seal:'t2',name:'종족 봉인',text:'종족 조합(T2) 점수가 0이 돼요'},
- {id:'rule_seal_t3',seal:'t3',name:'직업 봉인',text:'직업 조합(T3) 점수가 0이 돼요'},
+ {id:'rule_seal_t2',seal:'t2',name:'종족 봉인',text:'종족 조합(T2) 배율이 사라져요'},
+ {id:'rule_seal_t3',seal:'t3',name:'직업 봉인',text:'직업 조합(T3) 배율이 사라져요'},
  {id:'rule_invert_affinity',seal:'invertAffinity',name:'상성 반전',text:'유리와 불리가 뒤바뀌어요'},
  {id:'rule_freeze_characters',seal:'freezeCharacters',name:'캐릭터 동결',text:'캐릭터 카드가 나오지 않아요'},
 ];
@@ -105,7 +105,7 @@ function validateContent(c=content){
  for(const w of c.weapons){check(w.compatibleRigIds.includes(c.rig.id)&&c.assets[w.assetId],'무기 rig/이미지');check(num(w.powerBonus),'무기 전투력');}
  for(const s of c.stickers){check(c.assets[s.iconAssetId],'스티커 이미지');check(s.kind==='weapon'?byId(c.weapons,s.payloadId):s.kind==='element'?byId(c.elements,s.payloadId):s.kind==='star'&&s.starAmount===1,'스티커 구성');}
  for(const rule of c.combos){check(c.comboAxes.includes(rule.axis)&&rule.exclusiveGroup===rule.axis,'족보 축');check(rule.threshold===3&&num(rule.flatPowerBonus),'족보 수치');check(['collection','triple'].includes(rule.kind)&&c.comboLevelKinds.includes(rule.levelKind)&&Number.isInteger(rule.priority),'족보 종류/레벨/우선순위');}
- for(const t of c.tierCombos)check([2,3].includes(t.tier)&&['race','job'].includes(t.axis)&&['collection','triple'].includes(t.kind)&&num(t.power)&&t.power>0&&t.name,'티어 조합');
+ for(const t of c.tierCombos)check([2,3].includes(t.tier)&&['race','job'].includes(t.axis)&&['collection','triple'].includes(t.kind)&&num(t.multiplier)&&t.multiplier>=1&&t.name,'티어 조합');
  check(c.tierCombos.filter(t=>t.tier===2).every(t=>t.axis==='race')&&c.tierCombos.filter(t=>t.tier===3).every(t=>t.axis==='job'),'T2 종족, T3 직업');
  check(c.jobs.every(j=>byId(c.weapons,c.jobWeapon[j.id])),'직업-무기 짝');
  for(const r of c.t4Rules){

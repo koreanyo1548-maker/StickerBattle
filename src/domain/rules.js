@@ -52,7 +52,7 @@ function weaponPower(u,c){return u.weaponId?byId(c.weapons,u.weaponId).powerBonu
 function recipeFor(unit,c){return c.weaponRecipes.find(r=>r.weaponId===unit.weaponId&&r.elementId===unit.elementId)??null;}
 // T1: 레시피가 있으면 조건 없이 t1Power × 레시피 Lv. 캐릭터당 하나.
 function t1Of(unit,c,levels){const r=recipeFor(unit,c);if(!r)return null;const level=levelOf(levels,r.id);return {instanceId:unit.instanceId,recipeId:r.id,name:r.name,level,power:c.balance.t1Power*level};}
-// T2(종족)·T3(직업): 원정대 단위. 성립하면 원정대에 한 번 더한다.
+// T2(종족)·T3(직업): 원정대 단위. 성립하면 점수 전체에 배율을 곱한다.
 function evaluateTiers(team,c){
  const us=members(team),pick=(tier,axis)=>{const p=patternOf(us,axis,c);return p?c.tierCombos.find(t=>t.tier===tier&&t.axis===axis&&t.kind===p.kind)??null:null;};
  return {t2:pick(2,'race'),t3:pick(3,'job')};
@@ -91,8 +91,8 @@ function evaluateAffinity(team,blindElementId,c,{invert=false,flip=false}={}){
  const average=units.length?units.reduce((n,x)=>n+x.multiplier,0)/units.length:1;
  return {average,units};
 }
-// 점수 = floor((캐릭터 덧셈 + 족보 보너스 + T2 + T3) × 상성 평균 × 족보 레벨 배율 × Π T4 배율).
-// 캐릭터 덧셈 = 기본 + 무기(강화 포함) + 별 + T1. 봉인은 해당 점수만 0으로 하고 T4 조건 판정에는 영향이 없다.
+// 점수 = floor((캐릭터 덧셈 + 족보 보너스) × 상성 평균 × 족보 레벨 배율 × T2 배율 × T3 배율 × Π T4 배율).
+// 캐릭터 덧셈 = 기본 + 무기(강화 포함) + 별 + T1. 봉인은 해당 점수(T2·T3는 배율 ×1)만 끄고 T4 조건 판정에는 영향이 없다.
 // opts.burst: 판정 때 굴린 확률 효과(운명의 일족)가 터졌는지. 미리보기는 false.
 function scoreTeam(team,blind,progress,c,opts={}){
  const levels=progress?.levels??{},us=members(team),seal=sealOf(blind,c);
@@ -101,16 +101,16 @@ function scoreTeam(team,blind,progress,c,opts={}){
  const stars=seal==='star'?0:us.reduce((n,u)=>n+u.starLevel*c.balance.starPower,0);
  const t1Units=us.map(u=>t1Of(u,c,levels)).filter(Boolean),t1=seal==='t1'?0:t1Units.reduce((n,x)=>n+x.power,0);
  const matches=evaluateCombos(team,c,levels),combos=matches.reduce((n,m)=>n+m.bonus,0);
- const tiers=evaluateTiers(team,c),t2=seal==='t2'?0:tiers.t2?.power??0,t3=seal==='t3'?0:tiers.t3?.power??0;
+ const tiers=evaluateTiers(team,c),t2Multiplier=seal==='t2'?1:tiers.t2?.multiplier??1,t3Multiplier=seal==='t3'?1:tiers.t3?.multiplier??1;
  const t4Rules=activeT4(team,c);
  const affinity=evaluateAffinity(team,blind?.elementId,c,{invert:seal==='invertAffinity',flip:t4Rules.some(r=>r.flipDisadvantage)});
  const comboMultiplier=matches.reduce((n,m)=>n*m.multiplier,1);
  const t4=t4Rules.map(r=>({id:r.id,name:r.name,multiplier:r.multiplier*(opts.burst&&r.chance?r.chanceMultiplier:1),burst:!!(opts.burst&&r.chance)}));
  const t4Multiplier=t4.reduce((n,x)=>n*x.multiplier,1);
- const chips=base+weapons+stars+t1+combos+t2+t3,multiplier=affinity.average*comboMultiplier*t4Multiplier;
+ const chips=base+weapons+stars+t1+combos,multiplier=affinity.average*comboMultiplier*t2Multiplier*t3Multiplier*t4Multiplier;
  // 모든 배율을 합성한 뒤에만 소수점 버림. 경계의 부동소수점 오차만 보정한다.
  const floor=v=>Math.floor(v+Number.EPSILON*Math.max(1,Math.abs(v))*8);
- return {base,weapons,stars,t1,t1Units,combos,matches,tiers,t2,t3,t4,t4Multiplier,affinity,comboMultiplier,chips,multiplier,score:floor(chips*multiplier)};
+ return {base,weapons,stars,t1,t1Units,combos,matches,tiers,t2Multiplier,t3Multiplier,t4,t4Multiplier,affinity,comboMultiplier,chips,multiplier,score:floor(chips*multiplier)};
 }
 // 시드 기반 RNG: 순수한 상태 입출력. 같은 시드와 명령은 같은 결과를 만든다.
 function nextRandom(seed){let x=seed>>>0||1;x^=x<<13;x^=x>>>17;x^=x<<5;return {seed:x>>>0,value:(x>>>0)/4294967296};}

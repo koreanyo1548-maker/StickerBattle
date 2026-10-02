@@ -166,13 +166,13 @@ function playerUnit(u,slot,r){
  return `<button type="button" class="punit ${cls} ${fx?.attached===slot?'slap':''}" data-action="attach" data-slot="${slot}" aria-label="${nameOf(u.characterDefId)}${selected?'에게 놓기':' 정보'}">${badge}${unitBadges(u,state.battle)}<canvas data-render="${u.instanceId}"></canvas><span class="uname">${nameOf(u.characterDefId)}</span>${recipeChip(u,r)}</button>`;
 }
 function playerZone(){
- const r=reading(),tiers=[r.tiers.t2,r.tiers.t3].filter(Boolean).map(t=>`${t.name} +${number(t.power)}`);
+ const r=reading(),tiers=[r.tiers.t2,r.tiers.t3].filter(Boolean).map(t=>`${t.name} ×${number(t.multiplier)}`);
  return `<section class="player-zone"><div class="zone-head"><strong>${uiIcon('sword')} 우리 원정대</strong>${tiers.length?`<span class="acc" id="acc" title="종족 조합(T2)·직업 조합(T3)">${tiers.join(' · ')}</span>`:'<span class="acc" id="acc" hidden></span>'}</div><div class="party">${state.run.team.characters.map((u,slot)=>playerUnit(u,slot,r)).join('')}</div></section>`;
 }
-// 칸: 무기·속성 족보, 종족(T2)·직업(T3) 조합, T4. 성립하면 불이 켜지고 오른쪽에 덧셈 보너스 합계. 자세한 내용은 말풍선.
+// 칸: 무기·속성 족보, 종족(T2)·직업(T3) 조합, T4. 성립하면 불이 켜지고 오른쪽에 족보 덧셈 보너스 합계. 자세한 내용은 말풍선.
 function comboTray(){
  const r=reading(),burst=new Set((fx?.changes??[]).filter(x=>x.gain&&x.axis).map(x=>x.axis));
- const total=r.combos+r.t2+r.t3;
+ const total=r.combos;
  const lights=[...c.comboAxes.map(axis=>({on:r.matches.some(x=>x.axis===axis),label:axisLabels[axis],key:axis})),{on:!!r.tiers.t2,label:'종족',key:'race'},{on:!!r.tiers.t3,label:'직업',key:'job'},{on:r.t4.length>0,label:'T4',key:'t4'}];
  return `<button type="button" class="tray" data-action="combos" aria-label="족보·조합 보너스 +${number(total)}, 자세히 보기"><span class="lights">${lights.map(l=>`<span class="light ${l.on?'full':''} ${burst.has(l.key)?'lit':''}"><small>${l.label}</small><i></i></span>`).join('')}</span><b class="tray-total ${total?'on':''}" id="tray-total">+${number(total)}</b></button>`;
 }
@@ -207,6 +207,8 @@ function stepItems(r){
  const items=[`<li class="add" data-add="${r.chips}">기초<b>+${number(r.chips)}</b></li>`];
  if(r.affinity.average!==1)items.push(`<li class="mul aff-step" data-mul="${r.affinity.average}">상성 평균<b>×${number(r.affinity.average)}</b></li>`);
  if(r.comboMultiplier!==1)items.push(`<li class="mul" data-mul="${r.comboMultiplier}" data-src="tray">족보 Lv<b>×${number(r.comboMultiplier)}</b></li>`);
+ if(r.t2Multiplier!==1)items.push(`<li class="mul" data-mul="${r.t2Multiplier}" data-src="tray">${r.tiers.t2.name}<b>×${number(r.t2Multiplier)}</b></li>`);
+ if(r.t3Multiplier!==1)items.push(`<li class="mul" data-mul="${r.t3Multiplier}" data-src="tray">${r.tiers.t3.name}<b>×${number(r.t3Multiplier)}</b></li>`);
  for(const t of r.t4)items.push(`<li class="mul" data-mul="${t.multiplier}" data-src="tray">${t.name}${t.burst?' 폭발!':''}<b>×${number(t.multiplier)}</b></li>`);
  return items.join('');
 }
@@ -319,9 +321,9 @@ function unitPop(slot){
 }
 function combosPop(){
  const r=reading(),ups=c.comboLevelKinds.filter(k=>levelOf(state.run.levels,k)>1),tiers=[r.tiers.t2,r.tiers.t3].filter(Boolean);
- return `<b class="pop-title">족보 · 조합 <em>+${number(r.combos+r.t2+r.t3)}</em></b>
+ return `<b class="pop-title">족보 · 조합 <em>+${number(r.combos)}</em></b>
  ${r.matches.map(m=>`<div class="pop-row">${comboName(m)}<em>+${number(m.bonus)}</em></div>`).join('')}
- ${tiers.map(t=>`<div class="pop-row">${t.name} (T${t.tier})<em>+${number(t.power)}</em></div>`).join('')}
+ ${tiers.map(t=>`<div class="pop-row lv">${t.name} (T${t.tier})<em>${r[`t${t.tier}Multiplier`]===1?'봉인됨':`×${number(t.multiplier)}`}</em></div>`).join('')}
  ${r.t4.map(t=>`<div class="pop-row lv">${t.name} (T4)<em>×${number(t.multiplier)}</em></div>`).join('')}
  ${!r.matches.length&&!tiers.length&&!r.t4.length?'<div class="pop-row dim">3명의 종족·직업·무기·속성이 모두 같으면 트리플, 모두 다르면 컬렉션이에요.</div>':''}
  ${ups.map(k=>`<div class="pop-row lv">${levelKindLabels[k]} Lv${levelOf(state.run.levels,k)}<em>성립마다 ×${number(1+c.balance.comboMultPerLevel*(levelOf(state.run.levels,k)-1))}</em></div>`).join('')}
@@ -557,19 +559,19 @@ function showRules(){const t=c.balance;openInfo(`<h2>원정 규칙</h2><ol>
 <li><b>별</b>: 붙일 때마다 Lv+1. 캐릭터 기초 점수가 Lv당 +${t.starPower}.</li>
 <li><b>속성</b>: 같은 속성을 붙이면 Lv+1, 다른 속성을 붙이면 교체되고 Lv1부터 다시 시작해요.</li>
 <li><b>무기</b>: 기초 +${t.weaponPower}. 같은 무기를 또 붙이면 강화 +1(기초 +${t.weaponPlusPower}씩), 다른 무기를 붙이면 교체되고 강화는 +0부터. 무기와 속성이 함께 있으면 조합 무기(T1, +${t.t1Power} × 레시피 Lv)가 돼요.</li>
-<li><b>종족·직업 조합</b>: 3명의 종족이 모두 같거나 모두 다르면 T2, 직업이 그러면 T3. 원정대에 한 번 더해져요.</li>
+<li><b>종족·직업 조합</b>: 3명의 종족이 모두 같거나 모두 다르면 T2, 직업이 그러면 T3. 점수 전체에 배율이 곱해져요.</li>
 <li><b>T4</b>: 3명 모두 조합 무기가 있고 종족·직업 조합과 추가 조건을 맞추면 성립해요. 점수 전체에 배율이 곱해지고, 여러 개가 함께 성립할 수 있어요.</li>
 <li><b>상성</b>: ${cycleText()}. 블라인드 속성을 이기면 ×(1+${t.affinityPerLevel}×속성Lv), 지면 그만큼 나눠요. 원정대에는 3명의 평균이 곱해져요.</li>
-<li>점수는 <b>기초 × 배율</b>. 기초는 캐릭터·무기·별·조합 무기·족보 보너스·종족 조합·직업 조합의 합, 배율은 상성 평균·족보 레벨·T4를 곱한 값이에요.</li>
+<li>점수는 <b>기초 × 배율</b>. 기초는 캐릭터·무기·별·조합 무기·족보 보너스의 합, 배율은 상성 평균·족보 레벨·종족 조합·직업 조합·T4를 곱한 값이에요.</li>
 <li>원정대는 블라인드가 바뀌어도 그대로예요. 블라인드를 넘기면 보상 카드 3장을 섞어 1장을 뽑아요.</li></ol><p class="note">현재 수치는 재미와 균형 확인용 임시값입니다.</p><button type="button" class="ghost help-tips" data-help="tips">처음 안내 다시 보기</button>`);}
 function showAffinity(){openInfo(`<h2>상성</h2><p>${cycleText()}. 캐릭터마다 블라인드 속성과 비교해요.</p><table class="table"><tr><td>유리 ▲</td><td>×(1 + ${c.balance.affinityPerLevel} × 속성 Lv)</td></tr><tr><td>불리 ▼</td><td>÷(1 + ${c.balance.affinityPerLevel} × 속성 Lv)</td></tr><tr><td>무관</td><td>×1</td></tr></table><p class="note">원정대 점수에는 3명의 상성 배율 평균이 곱해져요.</p>`);}
 function showCombos(){
  const lv=k=>levelOf(state.run?.levels,k),bonus=(axis,kind)=>c.combos.find(r=>r.axis===axis&&r.kind===kind).flatPowerBonus;
- const tier=(axis,kind)=>c.tierCombos.find(t=>t.axis===axis&&t.kind===kind).power;
+ const tier=(axis,kind)=>c.tierCombos.find(t=>t.axis===axis&&t.kind===kind).multiplier;
  openInfo(`<h2>족보 · 조합</h2><p>3명 기준으로 모두 같으면 트리플, 모두 다르면 컬렉션이에요. 2명만 같으면 성립하지 않아요.</p><table class="table">
  <tr><td>무기·속성 족보</td><td>컬렉션 +${bonus('weapon','collection')} · 트리플 +${bonus('weapon','triple')}</td></tr>
- <tr><td>종족 조합 (T2)</td><td>컬렉션 +${tier('race','collection')} · 트리플 +${tier('race','triple')}</td></tr>
- <tr><td>직업 조합 (T3)</td><td>컬렉션 +${tier('job','collection')} · 트리플 +${tier('job','triple')}</td></tr></table>
+ <tr><td>종족 조합 (T2)</td><td>컬렉션 ×${tier('race','collection')} · 트리플 ×${tier('race','triple')}</td></tr>
+ <tr><td>직업 조합 (T3)</td><td>컬렉션 ×${tier('job','collection')} · 트리플 ×${tier('job','triple')}</td></tr></table>
  <h3 class="sheet-h">T4 원정대 효과</h3><table class="table">${c.t4Rules.map(r=>`<tr><td>${r.name} ×${r.multiplier}</td><td>${r.text}</td></tr>`).join('')}</table>
  <h3 class="sheet-h">레벨</h3><p>보상으로 무기·속성 족보의 컬렉션·트리플 레벨을 올려요. Lv이 오르면 보너스가 ×Lv, 성립할 때마다 배율 ×(1+${c.balance.comboMultPerLevel}×(Lv−1)).</p><table class="table">${c.comboLevelKinds.map(k=>`<tr><td>${levelKindLabels[k]}</td><td>Lv${lv(k)}</td></tr>`).join('')}</table>`);
 }
@@ -582,8 +584,8 @@ function inspect(slot){
 function showBreakdown(){
  const r=reading(),b=state.battle;
  openInfo(`<h2>점수 계산</h2><p class="sub">${state.phase==='attach'?'지금 전투하면 이렇게 계산돼요.':'이번 블라인드의 확정 점수예요.'}</p><table class="table">
- <tr><td>캐릭터·무기·별</td><td>${r.base+r.weapons+r.stars}</td></tr><tr><td>조합 무기 (T1)</td><td>+${number(r.t1)}</td></tr><tr><td>족보 보너스</td><td>+${number(r.combos)}</td></tr><tr><td>종족 조합 (T2)</td><td>+${number(r.t2)}</td></tr><tr><td>직업 조합 (T3)</td><td>+${number(r.t3)}</td></tr><tr><td><b>기초</b></td><td><b>${number(r.chips)}</b></td></tr>
- <tr><td>상성 평균</td><td>×${number(r.affinity.average)}</td></tr><tr><td>족보 레벨 배율</td><td>×${number(r.comboMultiplier)}</td></tr><tr><td>T4 ${r.t4.map(t=>t.name).join(' · ')||'없음'}</td><td>×${number(r.t4Multiplier)}</td></tr><tr><td><b>배율</b></td><td><b>×${number(r.multiplier)}</b></td></tr>
+ <tr><td>캐릭터·무기·별</td><td>${r.base+r.weapons+r.stars}</td></tr><tr><td>조합 무기 (T1)</td><td>+${number(r.t1)}</td></tr><tr><td>족보 보너스</td><td>+${number(r.combos)}</td></tr><tr><td><b>기초</b></td><td><b>${number(r.chips)}</b></td></tr>
+ <tr><td>상성 평균</td><td>×${number(r.affinity.average)}</td></tr><tr><td>족보 레벨 배율</td><td>×${number(r.comboMultiplier)}</td></tr><tr><td>종족 조합 (T2)</td><td>×${number(r.t2Multiplier)}</td></tr><tr><td>직업 조합 (T3)</td><td>×${number(r.t3Multiplier)}</td></tr><tr><td>T4 ${r.t4.map(t=>t.name).join(' · ')||'없음'}</td><td>×${number(r.t4Multiplier)}</td></tr><tr><td><b>배율</b></td><td><b>×${number(r.multiplier)}</b></td></tr>
  <tr><td><b>점수</b> / 목표</td><td><b>${r.score}</b> / ${b.target}</td></tr></table>`);
 }
 function showDeck(){const groups=new Map();state.run.deckDefIds.forEach(id=>groups.set(id,(groups.get(id)??0)+1));openInfo(`<h2>덱 ${state.run.deckDefIds.length}장</h2><p class="sub">원정 내내 같은 덱이에요. 남은 덱 ${state.battle.drawPile.length}장.</p><table class="table">${[...groups].map(([id,n])=>`<tr><td>${nameOf(byId(c.stickers,id).nameKey)}</td><td>${n}장</td></tr>`).join('')}</table>`);}

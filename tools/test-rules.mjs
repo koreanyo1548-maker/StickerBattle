@@ -39,22 +39,25 @@ const mixed = () => team(
 
 test('점수 공식: 손으로 계산한 예제와 일치', () => {
   const r = rules.scoreTeam(mixed(), blind('element_lightning'), { levels: {} }, c);
-  // 덧셈: 기본 15 + 무기 15 + 별 (2+1+0)×3=9 + T1 10×3=30 + 족보(무기·속성 컬렉션) 20 + T2 종족 컬렉션 100 + T3 직업 컬렉션 1000 = 1189
-  assert.deepEqual([r.base, r.weapons, r.stars, r.t1, r.combos, r.t2, r.t3, r.chips], [15, 15, 9, 30, 20, 100, 1000, 1189]);
-  // 상성: 불 Lv2 유리 1.5, 물 Lv1 불리 → 원소 공명으로 유리 1.25, 번개 무관 1 → 평균 1.25. 족보 Lv1 ×1. T4 원소 공명 ×2.
+  // 덧셈: 기본 15 + 무기 15 + 별 (2+1+0)×3=9 + T1 10×3=30 + 족보(무기·속성 컬렉션) 20 = 89
+  assert.deepEqual([r.base, r.weapons, r.stars, r.t1, r.combos, r.chips], [15, 15, 9, 30, 20, 89]);
+  // 상성: 불 Lv2 유리 1.5, 물 Lv1 불리 → 원소 공명으로 유리 1.25, 번개 무관 1 → 평균 1.25. 족보 Lv1 ×1.
+  // T2 종족 컬렉션 ×1.5, T3 직업 컬렉션 ×2, T4 원소 공명 ×2 → 배율 7.5, 점수 floor(89 × 7.5) = 667
   near(r.affinity.average, 1.25); assert.deepEqual(r.t4.map(x => x.id), ['t4_resonance']);
-  near(r.multiplier, 2.5); assert.equal(r.score, 2972);
+  assert.deepEqual([r.t2Multiplier, r.t3Multiplier], [1.5, 2]);
+  near(r.multiplier, 7.5); assert.equal(r.score, 667);
 });
 
-test('T2·T3: 트리플과 컬렉션만 성립하고 페어는 없으며, 원정대에 한 번만 더한다', () => {
+test('T2·T3: 트리플과 컬렉션만 성립하고 페어는 없으며, 점수 전체에 배율을 곱한다', () => {
   const pair = team(unit(0, 'human_warrior'), unit(1, 'human_archer'), unit(2, 'elf_warrior'));
   const p = rules.scoreTeam(pair, blind(), { levels: {} }, c);
-  assert.deepEqual([p.t2, p.t3, p.tiers.t2, p.tiers.t3], [0, 0, null, null]);
+  assert.deepEqual([p.t2Multiplier, p.t3Multiplier, p.tiers.t2, p.tiers.t3], [1, 1, null, null]);
   const tri = team(unit(0, 'human_warrior'), unit(1, 'human_archer'), unit(2, 'human_mage'));
   const t = rules.scoreTeam(tri, blind(), { levels: {} }, c);
-  assert.deepEqual([t.tiers.t2.id, t.tiers.t3.id, t.t2, t.t3], ['tier_race_triple', 'tier_job_collection', 200, 1000]);
+  assert.deepEqual([t.tiers.t2.id, t.tiers.t3.id, t.t2Multiplier, t.t3Multiplier], ['tier_race_triple', 'tier_job_collection', 2, 2]);
+  near(t.multiplier, 4); assert.equal(t.score, t.chips * 4);
   const two = rules.scoreTeam(team(unit(0, 'human_warrior'), unit(1, 'human_warrior')), blind(), { levels: {} }, c);
-  assert.deepEqual([two.t2, two.t3], [0, 0]);
+  assert.deepEqual([two.t2Multiplier, two.t3Multiplier], [1, 1]);
 });
 
 test('족보: 무기·속성 축만, 족보 레벨은 보너스 ×Lv와 배율 1+0.25(Lv−1)', () => {
@@ -97,13 +100,13 @@ test('상성: 대칭, 원정대는 산술 평균, 보스 상성 반전', () => {
   near(s.affinity.average, (1.5 + 1.25 + 1) / 3);
 });
 
-test('보스 봉인: 해당 점수만 0이 되고 T4 판정에는 영향이 없다', () => {
+test('보스 봉인: 해당 점수(T2·T3는 배율)만 꺼지고 T4 판정에는 영향이 없다', () => {
   const sc = rule => rules.scoreTeam(mixed(), { target: 1, elementId: null, ruleId: rule }, { levels: {} }, c);
   assert.equal(sc('rule_seal_weapon').weapons, 0);
   assert.equal(sc('rule_seal_star').stars, 0);
   assert.equal(sc('rule_seal_t1').t1, 0);
-  assert.equal(sc('rule_seal_t2').t2, 0);
-  assert.equal(sc('rule_seal_t3').t3, 0);
+  assert.equal(sc('rule_seal_t2').t2Multiplier, 1);
+  assert.equal(sc('rule_seal_t3').t3Multiplier, 1);
   assert.deepEqual(sc('rule_seal_t3').t4.map(x => x.id), ['t4_resonance']);
 });
 

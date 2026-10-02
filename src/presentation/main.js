@@ -1,6 +1,6 @@
 modules["src/presentation/main.mjs"]=(()=>{
 const {content,byId,nameOf,validateContent}=modules["src/content/data.mjs"];
-const {makeUnit,recipeFor,weaponPower,activeCombos,relationOf,levelOf}=modules["src/domain/rules.mjs"];
+const {makeUnit,recipeFor,weaponPower,activeCombos,relationOf,levelOf,sealOf}=modules["src/domain/rules.mjs"];
 const {initialState,projectedScore,attachLimitFor,applyCommand}=modules["src/application/game.mjs"];
 const {renderCharacter}=modules["src/rendering/compositor.mjs"];
 
@@ -154,7 +154,7 @@ function unitBadges(u,b,final=false){
 }
 function recipeChip(u,r){
  const recipe=recipeFor(u,c);if(!recipe)return '';
- const lv=levelOf(state.run.levels,recipe.id),on=state.battle?.ruleId!=='rule_seal_t1';
+ const lv=levelOf(state.run.levels,recipe.id),on=sealOf(state.battle,c)!=='t1';
  return `<span class="recipe ${on?'on':''} k-${effectKind(recipe)}">${u.weaponPlus?`+${u.weaponPlus} `:''}${recipe.name} Lv${lv}<i>${on?'✓':'✗'}</i></span>`;
 }
 function playerUnit(u,slot,r){
@@ -562,7 +562,7 @@ function showRules(){const t=c.balance;openInfo(`<h2>원정 규칙</h2><ol>
 <li><b>상성</b>: ${cycleText()}. 블라인드 속성을 이기면 ×(1+${t.affinityPerLevel}×속성Lv), 지면 그만큼 나눠요. 원정대에는 3명의 평균이 곱해져요.</li>
 <li>점수는 <b>기초 × 배율</b>. 기초는 캐릭터·무기·별·조합 무기·족보 보너스·종족 조합·직업 조합의 합, 배율은 상성 평균·족보 레벨·T4를 곱한 값이에요.</li>
 <li>원정대는 블라인드가 바뀌어도 그대로예요. 블라인드를 넘기면 보상 카드 3장을 섞어 1장을 뽑아요.</li></ol><p class="note">현재 수치는 재미와 균형 확인용 임시값입니다.</p><button type="button" class="ghost help-tips" data-help="tips">처음 안내 다시 보기</button>`);}
-function showAffinity(){openInfo(`<h2>상성</h2><p>${cycleText()}. 캐릭터마다 블라인드 속성과 비교해요.</p><table class="table"><tr><td>유리 ▲</td><td>×(1 + ${c.balance.affinityPerLevel} × 속성 Lv)</td></tr><tr><td>불리 ▼</td><td>÷(1 + ${c.balance.affinityPerLevel} × 속성 Lv)</td></tr><tr><td>무관</td><td>×1</td></tr></table><p class="note">다음 블라인드 속성은 미리 알려줘요. 그때 불리해질 캐릭터에는 ! 표시가 붙어요.</p>`);}
+function showAffinity(){openInfo(`<h2>상성</h2><p>${cycleText()}. 캐릭터마다 블라인드 속성과 비교해요.</p><table class="table"><tr><td>유리 ▲</td><td>×(1 + ${c.balance.affinityPerLevel} × 속성 Lv)</td></tr><tr><td>불리 ▼</td><td>÷(1 + ${c.balance.affinityPerLevel} × 속성 Lv)</td></tr><tr><td>무관</td><td>×1</td></tr></table><p class="note">원정대 점수에는 3명의 상성 배율 평균이 곱해져요.</p>`);}
 function showCombos(){
  const lv=k=>levelOf(state.run?.levels,k),bonus=(axis,kind)=>c.combos.find(r=>r.axis===axis&&r.kind===kind).flatPowerBonus;
  const tier=(axis,kind)=>c.tierCombos.find(t=>t.axis===axis&&t.kind===kind).power;

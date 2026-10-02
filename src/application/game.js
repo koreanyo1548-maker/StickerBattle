@@ -1,142 +1,221 @@
 modules["src/application/game.mjs"]=(()=>{
 const {byId}=modules["src/content/data.mjs"];
-const {makeUnit,attachUnit,attachmentReason,activeCombos,recipeFor,scoreTeam,activeT4,attachBonusOf,sealOf,shuffle,weightedPick,drawCards,nextRandom}=modules["src/domain/rules.mjs"];
+const {makeUnit,attachmentReason,scoreAttack,nextRandom,shuffle,weightedPick,drawCards}=modules["src/domain/rules.mjs"];
 
-// 흐름: title → (블라인드마다) attach 최대 6턴(언제든 조기 전투) → resolve → reward_reveal → reward_pick → reward_done → 다음 블라인드
-//       목표 미달이거나 마지막 블라인드를 넘기면 run_result.
-const initialState=()=>({phase:'title',run:null,battle:null,reward:null,appliedCommandIds:[],events:[],history:[]});
-const blindOf=(b)=>({target:b.target,elementId:b.elementId,ruleId:b.ruleId??null});
-// 지금 전투하면 판정될 점수. 화면의 예상 점수와 EndTurn의 판정이 같은 함수를 쓴다. team을 주면 그 편성으로 계산한다(미리보기용).
-// opts.burst는 판정 때만 굴린다. 미리보기는 확률 효과를 쓰지 않는다.
-function projectedScore(run,b,c,team=run.team,opts={}){return scoreTeam(team,blindOf(b),{levels:run.levels},c,opts);}
-// 이번 턴 붙이기 한도: 기본 + 지금 성립한 T4의 보너스(진형 등).
-function attachLimitFor(state,c){return c.balance.attachLimit+attachBonusOf(state.run.team,c);}
-function validateAttachment(state,command,c){
- const b=state.battle;if(state.phase!=='attach'||!b)return 'phase';if(b.actionsUsed>=attachLimitFor(state,c))return 'limit';
- const card=b.hand.find(x=>x.instanceId===command.stickerInstanceId);if(!card||!card.stickerDefId)return 'card';
- return attachmentReason(state.run.team.characters.find(u=>u?.instanceId===command.targetInstanceId),byId(c.stickers,card.stickerDefId),c);
+// 흐름: title → starter(시작 캐릭터 3명 중 1명) → blind_select ⇄(건너뛰기) → battle(공격·버리기)
+//       → 승리: cashout → shop(⇄ deck_pick) → blind_select … 마지막 보스 정산 뒤 run_result. 패배: run_result.
+const initialState=()=>({phase:'title',run:null,battle:null,shop:null,starter:null,pick:null,appliedCommandIds:[],events:[],history:[]});
+const blindKindOf=(run,c)=>c.blindKinds[run.blindIndex];
+const targetOf=(run,c)=>Math.round(c.anteBase[run.ante]*blindKindOf(run,c).targetMult);
+const isFinalBlind=(run,c)=>run.ante===c.balance.anteCount-1&&run.blindIndex===c.blindKinds.length-1;
+const bossRuleOf=(run,c)=>byId(c.bossRules,run.bossRuleIds[run.ante]);
+// 지금 블라인드(또는 다음에 고를 블라인드)의 정보. 화면의 블라인드 선택과 전투가 같은 값을 쓴다.
+function blindInfo(run,c,index=run.blindIndex){
+ const kind=c.blindKinds[index],k=run.ante*c.blindKinds.length+index,boss=kind.id==='boss';
+ return {kind,index,target:Math.round(c.anteBase[run.ante]*kind.targetMult),elementId:run.blindElements[k],rule:boss?bossRuleOf(run,c):null,tagId:kind.skippable?run.skipTags[k]:null,monsterId:boss?c.bossMonsterId:c.monsters.find(m=>m.elementId===run.blindElements[k]).id};
 }
-// 빈 자리 배치와 교체 모두 언제나 가능하고 붙이기 1회를 쓴다.
-function validatePlacement(state,command,c){
- const b=state.battle;if(state.phase!=='attach'||!b)return 'phase';if(b.actionsUsed>=attachLimitFor(state,c))return 'limit';
- const card=b.hand.find(x=>x.instanceId===command.cardInstanceId);if(!card||!card.characterDefId)return 'card';
- const slot=command.targetSlot;if(!Number.isInteger(slot)||slot<0||slot>=c.balance.teamSize)return 'target';
- const cur=state.run.team.characters[slot];
- if(cur&&cur.characterDefId===card.characterDefId)return 'sameCharacter';
+// 공격 미리보기와 판정이 같은 함수를 쓴다. plays: [{uid,targetInstanceId}]
+function previewAttack(state,plays,c){
+ const b=state.battle,run=state.run;
+ const cards=plays.map(p=>({card:b.hand.find(x=>x.uid===p.uid),targetInstanceId:p.targetInstanceId}));
+ return scoreAttack({team:run.team.characters,plays:cards,levels:run.levels,blind:{elementId:b.elementId,effect:b.effect,silencedSlot:b.silencedSlot},discardsLeft:b.discardsLeft,lastAttack:b.attacksLeft===1},c);
+}
+// 다섯 장 규칙: 낼 수 있는 카드가 5장보다 적으면 가진 카드 전부.
+function requiredPlay(state,c){const b=state.battle;return b.effect==='exactFive'?Math.min(c.balance.maxPlay,b.hand.length):null;}
+function validateAttack(state,cmd,c){
+ const b=state.battle;if(state.phase!=='battle'||!b)return 'phase';
+ const plays=cmd.plays;if(!Array.isArray(plays)||!plays.length)return 'empty';
+ if(plays.length>c.balance.maxPlay)return 'tooMany';
+ const need=requiredPlay(state,c);if(need&&plays.length!==need)return 'exactFive';
+ if(new Set(plays.map(p=>p.uid)).size!==plays.length)return 'card';
+ for(const p of plays){
+  const card=b.hand.find(x=>x.uid===p.uid);if(!card)return 'card';
+  const unit=state.run.team.characters.find(u=>u?.instanceId===p.targetInstanceId);if(!unit)return 'target';
+  const reason=attachmentReason(unit,byId(c.stickers,card.defId),c);if(reason)return reason;
+ }
  return null;
 }
-// 교체해도 스티커와 레벨은 새 캐릭터로 옮겨진다.
-function placeUnit(old,slot,defId){const unit=makeUnit(`unit_${slot}`,defId);return old?{...unit,weaponId:old.weaponId,weaponPlus:old.weaponPlus??0,elementId:old.elementId,elementLevel:old.elementLevel,starLevel:old.starLevel}:unit;}
-function beginTurn(s,c){
- const b=s.battle;b.turn++;b.actionsUsed=0;
- // 보스 규칙 캐릭터 동결: 캐릭터 카드가 나오지 않는다.
- const frozen=sealOf({ruleId:b.ruleId},c)==='freezeCharacters';
- let charTurn=!frozen&&c.characterRules.guaranteedTurns[b.blindIndex].includes(b.turn);
- if(!charTurn&&!frozen){const r=nextRandom(b.rngState);b.rngState=r.seed;charTurn=r.value<c.characterRules.randomChance;}
- drawCards(b,c.balance.handSize-(charTurn?1:0));
- if(charTurn){const r=nextRandom(b.rngState);b.rngState=r.seed;const def=c.characters[Math.floor(r.value*c.characters.length)];b.hand.unshift({instanceId:`${b.blindId}:char:${b.turn}`,characterDefId:def.id});}
- s.phase='attach';s.events.push({type:'TurnStarted',turn:b.turn});
+function rollSilence(b,team){
+ if(b.effect!=='silence'){b.silencedSlot=null;return;}
+ const slots=team.map((u,i)=>u?i:-1).filter(i=>i>=0);if(!slots.length){b.silencedSlot=null;return;}
+ const r=nextRandom(b.rngState);b.rngState=r.seed;b.silencedSlot=slots[Math.floor(r.value*slots.length)];
 }
 function startBlind(s,c){
- const r=s.run,i=r.blindIndex,blind=c.blinds[i],blindId=`${r.runId}:blind:${i}`;
- const deck=r.deckDefIds.map((id,k)=>({instanceId:`${blindId}:card:${k}`,stickerDefId:id})),sh=shuffle(deck,r.rngState);
- const elementId=r.blindElements[i],monsterId=blind.boss?c.bossMonsterId:c.monsters.find(m=>m.elementId===elementId).id;
- s.battle={blindId,blindIndex:i,target:blind.target,boss:blind.boss,monsterId,elementId,ruleId:blind.boss?r.bossRuleId:null,turn:0,actionsUsed:0,drawPile:sh.list,hand:[],discardPile:[],rngState:sh.seed,lastScore:null,outcome:null};
- s.events.push({type:'BlindStarted',blindIndex:i,elementId:s.battle.elementId,target:blind.target});
- beginTurn(s,c);
+ const r=s.run,info=blindInfo(r,c),blindId=`${r.runId}:a${r.ante}:b${r.blindIndex}`;
+ const sh=shuffle(r.deck.map(x=>({...x})),r.rngState);
+ const effect=info.rule?.effect??null;
+ s.battle={blindId,ante:r.ante,kindId:info.kind.id,target:info.target,damage:0,attacksLeft:c.balance.attacks,attacksUsed:0,discardsLeft:effect==='noDiscard'?0:c.balance.discards,
+  elementId:info.elementId,monsterId:info.monsterId,ruleId:info.rule?.id??null,effect,silencedSlot:null,drawPile:sh.list,hand:[],discardPile:[],rngState:sh.seed,lastAttack:null,outcome:null,cashout:null};
+ rollSilence(s.battle,r.team.characters);
+ drawCards(s.battle,c.balance.handSize);
+ s.phase='battle';s.events.push({type:'BlindStarted',ante:r.ante,kindId:info.kind.id,target:info.target,elementId:info.elementId});
 }
-// 보상 후보: 원정대가 든 레시피 각각 + 족보 종류. 3장을 고르고 각각 등급을 굴린다.
-function rollRewards(s,c){
- const r=s.run,rw=c.rewardRules;let seed=r.rngState;
- const recipes=[...new Set(r.team.characters.filter(Boolean).map(u=>recipeFor(u,c)?.id).filter(Boolean))];
- const candidates=[...recipes.map(key=>({type:'recipe',key})),...rw.comboKinds.map(key=>({type:'combo',key}))];
- const sh=shuffle(candidates,seed);seed=sh.seed;
- const offers=sh.list.slice(0,rw.offerCount).map((o,k)=>{const g=weightedPick(rw.grades,seed);seed=g.seed;return {id:`${r.runId}:reward:${r.blindIndex}:${k}`,...o,grade:g.item.id,levels:g.item.levels};});
- // 섞기: 자리 두 개를 바꾸는 교체를 swaps번. 화면은 이 순서대로 움직이고, 고른 자리의 카드가 그대로 보상이 된다.
- const swaps=[];let order=offers.map((_,k)=>k);
- for(let k=0;k<rw.swaps[r.blindIndex];k++){
-  const a=nextRandom(seed),b=nextRandom(a.seed);seed=b.seed;
-  const i=Math.floor(a.value*order.length),j=(i+1+Math.floor(b.value*(order.length-1)))%order.length;
-  swaps.push([i,j]);[order[i],order[j]]=[order[j],order[i]];
+function advanceBlind(run,c){run.blindIndex++;if(run.blindIndex>=c.blindKinds.length){run.blindIndex=0;run.ante++;}}
+const randomHand=(run,c)=>{const r=nextRandom(run.rngState);run.rngState=r.seed;return c.hands[Math.floor(r.value*c.hands.length)].id;};
+const levelUp=(run,handId,n)=>{run.levels={...run.levels,[handId]:(run.levels[handId]??1)+n};};
+const newCard=(run,defId,mod=null)=>({uid:`card_${run.nextUid++}`,defId,mod});
+function applyTag(s,tag,c){
+ const run=s.run;
+ if(tag.effect==='gold')run.gold+=tag.value;
+ else if(tag.effect==='freeRerolls')run.pending.freeRerolls+=tag.value;
+ else if(tag.effect==='halfCharacters')run.pending.halfCharacters=true;
+ else if(tag.effect==='handLevels'){const id=randomHand(run,c);levelUp(run,id,tag.value);s.events.push({type:'HandLeveled',handId:id,level:run.levels[id]});}
+ else if(tag.effect==='shinyCards'){
+  const plain=run.deck.filter(x=>!x.mod),sh=shuffle(plain,run.rngState);run.rngState=sh.seed;
+  const picked=new Set(sh.list.slice(0,tag.value).map(x=>x.uid));run.deck=run.deck.map(x=>picked.has(x.uid)?{...x,mod:'shiny'}:x);
+  s.events.push({type:'CardsModded',uids:[...picked],mod:'shiny'});
  }
- r.rngState=seed;
- return {offers,swaps,order,picked:null};
 }
-function applyReward(run,offer){run.levels={...run.levels,[offer.key]:(run.levels[offer.key]??1)+offer.levels};}
+const characterCost=(run,def,half)=>half?Math.ceil(def.cost/2):def.cost;
+function stockShop(s,c){
+ const run=s.run,sh=s.shop;let seed=run.rngState;
+ sh.characters=Array.from({length:c.shopRules.characterOffers},()=>{const r=nextRandom(seed);seed=r.seed;const def=c.characters[Math.floor(r.value*c.characters.length)];return {defId:def.id,cost:characterCost(run,def,sh.half),sold:false};});
+ sh.items=Array.from({length:c.shopRules.itemOffers},()=>{const p=weightedPick(c.items,seed);seed=p.seed;return {itemId:p.item.id,cost:p.item.cost,sold:false};});
+ run.rngState=seed;
+}
+function openShop(s,c){
+ const run=s.run;
+ s.shop={characters:[],items:[],rerolls:0,freeRerolls:run.pending.freeRerolls,half:run.pending.halfCharacters};
+ run.pending={freeRerolls:0,halfCharacters:false};
+ stockShop(s,c);s.phase='shop';
+}
+const rerollCost=(s,c)=>s.shop.freeRerolls>0?0:c.shopRules.rerollCost+s.shop.rerolls*c.shopRules.rerollStep;
+const slotCost=(run,c)=>run.team.characters.length<c.balance.maxSlots?c.shopRules.slotCosts[run.team.characters.length-c.balance.startSlots]:null;
+const sellValue=(unit,c)=>Math.max(1,Math.floor(byId(c.characters,unit.characterDefId).cost*c.shopRules.sellRate));
+function placeCharacter(run,defId){const slot=run.team.characters.findIndex(u=>!u);if(slot<0)return -1;run.team.characters[slot]=makeUnit(`unit_${run.nextUnit++}`,defId);return slot;}
+
 function applyCommand(state,cmd,c){
  if(!cmd.commandId)return {state,error:'command',events:[]};
  if(state.appliedCommandIds.includes(cmd.commandId))return {state,error:'duplicate',events:[]};
- // 실패는 원래 상태 그대로 반환하며 카드와 행동을 소비하지 않는다.
- if(cmd.type==='AttachSticker'){const reason=validateAttachment(state,cmd,c);if(reason)return {state,error:reason,events:[]};}
- if(cmd.type==='PlaceCharacter'){const reason=validatePlacement(state,cmd,c);if(reason)return {state,error:reason,events:[]};}
+ // 실패는 원래 상태 그대로 반환하며 카드·골드·행동을 소비하지 않는다.
+ if(cmd.type==='Attack'){const reason=validateAttack(state,cmd,c);if(reason)return {state,error:reason,events:[]};}
  const s=structuredClone(state);s.events=[];const fail=error=>({state,error,events:[]});
+ const run=s.run,b=s.battle;
  switch(cmd.type){
  case 'StartRun':{
   if(s.phase!=='title')return fail('phase');
-  const seed=cmd.seed>>>0||1;let rng=seed;
-  const blindElements=c.blinds.map(()=>{const r=nextRandom(rng);rng=r.seed;return c.elements[Math.floor(r.value*c.elements.length)].id;});
-  const rr=nextRandom(rng);rng=rr.seed;const bossRuleId=c.bossRules[Math.floor(rr.value*c.bossRules.length)].id;
-  s.run={schemaVersion:6,contentVersion:c.version,runId:`run_${seed}`,seed,rngState:rng,blindIndex:0,blindElements,bossRuleId,diamonds:0,team:{characters:Array(c.balance.teamSize).fill(null)},levels:{},deckDefIds:[...c.initialDeck],result:null};
-  s.history=[];startBlind(s,c);break;
+  const seed=cmd.seed>>>0||1;let rng=seed;const rand=()=>{const r=nextRandom(rng);rng=r.seed;return r.value;};
+  const total=c.balance.anteCount*c.blindKinds.length;
+  const blindElements=Array.from({length:total},()=>c.elements[Math.floor(rand()*c.elements.length)].id);
+  const skipTags=Array.from({length:total},()=>c.tags[Math.floor(rand()*c.tags.length)].id);
+  const bossSh=shuffle(c.bossRules.map(r=>r.id),rng);rng=bossSh.seed;
+  const starterSh=shuffle(c.characters.map(d=>d.id),rng);rng=starterSh.seed;
+  s.run={schemaVersion:7,contentVersion:c.version,runId:`run_${seed}`,seed,rngState:rng,ante:0,blindIndex:0,gold:c.economy.startGold,
+   team:{characters:Array(c.balance.startSlots).fill(null)},levels:{},deck:[],nextUid:0,nextUnit:0,blindElements,skipTags,bossRuleIds:bossSh.list.slice(0,c.balance.anteCount),
+   pending:{freeRerolls:0,halfCharacters:false},diamonds:0,result:null,handsPlayed:{}};
+  s.run.deck=c.initialDeck.map(id=>newCard(s.run,id));
+  s.starter=starterSh.list.slice(0,3);s.history=[];s.phase='starter';s.events.push({type:'RunStarted',seed});break;
  }
- case 'AttachSticker':{
-  const b=s.battle,team=s.run.team,idx=b.hand.findIndex(x=>x.instanceId===cmd.stickerInstanceId),card=b.hand[idx],def=byId(c.stickers,card.stickerDefId),ui=team.characters.findIndex(u=>u?.instanceId===cmd.targetInstanceId),old=team.characters[ui];
-  const before=activeCombos(team,c,s.run.levels,blindOf(b));team.characters[ui]=attachUnit(old,def,c).unit;b.discardPile.push(...b.hand.splice(idx,1));b.actionsUsed++;
-  const now=team.characters[ui];
-  s.events.push({type:'StickerAttached',targetInstanceId:old.instanceId,stickerDefId:def.id});
-  if(def.kind==='star')s.events.push({type:'StarLeveled',targetInstanceId:old.instanceId,level:now.starLevel});
-  else if(def.kind==='element'&&old.elementId===def.payloadId)s.events.push({type:'ElementLeveled',targetInstanceId:old.instanceId,level:now.elementLevel});
-  else if(def.kind==='element'&&old.elementId)s.events.push({type:'ElementReplaced',targetInstanceId:old.instanceId,from:old.elementId,lostLevel:old.elementLevel});
-  else if(def.kind==='weapon'&&old.weaponId===def.payloadId)s.events.push({type:'WeaponEnhanced',targetInstanceId:old.instanceId,plus:now.weaponPlus});
-  else if(def.kind==='weapon'&&old.weaponId)s.events.push({type:'EquipmentReplaced',targetInstanceId:old.instanceId,from:old.weaponId,lostPlus:old.weaponPlus??0});
-  const after=activeCombos(team,c,s.run.levels,blindOf(b));if(JSON.stringify(before)!==JSON.stringify(after))s.events.push({type:'ComboChanged',matches:after});break;
+ case 'PickStarter':{
+  if(s.phase!=='starter')return fail('phase');const defId=s.starter[cmd.index];if(!defId)return fail('target');
+  placeCharacter(run,defId);s.starter=null;s.phase='blind_select';s.events.push({type:'CharacterJoined',slot:0,defId});break;
  }
- case 'PlaceCharacter':{
-  const b=s.battle,team=s.run.team,idx=b.hand.findIndex(x=>x.instanceId===cmd.cardInstanceId),card=b.hand[idx],slot=cmd.targetSlot,old=team.characters[slot];
-  const before=activeCombos(team,c,s.run.levels,blindOf(b));team.characters[slot]=placeUnit(old,slot,card.characterDefId);b.hand.splice(idx,1);b.actionsUsed++;
-  s.events.push(old?{type:'CharacterReplaced',slot,from:old.characterDefId,to:card.characterDefId}:{type:'CharacterPlaced',slot,characterDefId:card.characterDefId});
-  const after=activeCombos(team,c,s.run.levels,blindOf(b));if(JSON.stringify(before)!==JSON.stringify(after))s.events.push({type:'ComboChanged',matches:after});break;
+ case 'SelectBlind':{if(s.phase!=='blind_select')return fail('phase');startBlind(s,c);break;}
+ case 'SkipBlind':{
+  if(s.phase!=='blind_select')return fail('phase');const info=blindInfo(run,c);if(!info.kind.skippable)return fail('boss');
+  const tag=byId(c.tags,info.tagId);applyTag(s,tag,c);
+  s.history.push({ante:run.ante,kindId:info.kind.id,target:info.target,score:0,outcome:'skip',tagId:tag.id});
+  s.events.push({type:'BlindSkipped',kindId:info.kind.id,tagId:tag.id});advanceBlind(run,c);break;
  }
- case 'EndTurn':{
-  // fight: 마지막 턴이 아니어도 지금 전투한다(조기 전투). 남은 턴은 다이아몬드 보너스가 된다.
-  if(s.phase!=='attach')return fail('phase');
-  const b=s.battle,r=s.run,last=b.turn>=c.balance.turnsPerBlind||cmd.fight===true;
-  // 판정 때 확률 효과(운명의 일족)를 블라인드 RNG로 한 번 굴린다. 같은 시드면 같은 결과.
-  let burst=false;
-  if(last){const chance=activeT4(r.team,c).find(x=>x.chance);if(chance){const rr=nextRandom(b.rngState);b.rngState=rr.seed;burst=rr.value<chance.chance;s.events.push({type:'T4Rolled',ruleId:chance.id,burst});}}
-  const res=last?projectedScore(r,b,c,r.team,{burst}):null;
-  b.discardPile.push(...b.hand.filter(x=>x.stickerDefId));b.hand=[];
-  if(!last){s.events.push({type:'TurnEnded',turn:b.turn});beginTurn(s,c);break;}
-  // 마지막 턴: 목표 점수 판정.
-  b.lastScore=res;b.outcome=res.score>=b.target?'win':'lose';r.rngState=b.rngState;s.phase='resolve';
-  const turnsLeft=c.balance.turnsPerBlind-b.turn,diamonds=b.outcome==='win'?c.metaRules.clearDiamonds+turnsLeft*c.metaRules.diamondsPerTurnLeft:0;
-  b.turnsLeft=turnsLeft;b.diamonds=diamonds;r.diamonds=(r.diamonds??0)+diamonds;
-  s.history.push({blindIndex:b.blindIndex,target:b.target,score:res.score,outcome:b.outcome,turn:b.turn,diamonds});
-  s.events.push({type:'BlindResolved',score:res.score,target:b.target,outcome:b.outcome,diamonds});break;
- }
- case 'FinishResolution':{
-  if(s.phase!=='resolve')return fail('phase');
-  const b=s.battle,r=s.run;
-  if(b.outcome!=='win'||r.blindIndex===c.blinds.length-1){r.result=b.outcome;s.phase='run_result';s.events.push({type:'RunEnded',result:r.result});}
-  else {s.reward=rollRewards(s,c);s.phase='reward_reveal';s.events.push({type:'RewardsRevealed',offers:s.reward.offers});}
+ case 'Attack':{
+  const res=previewAttack(state,cmd.plays,c);
+  run.team.characters=res.team;
+  const used=new Set(cmd.plays.map(p=>p.uid)),played=b.hand.filter(x=>used.has(x.uid));b.hand=b.hand.filter(x=>!used.has(x.uid));
+  // 유리 각인: 공격 뒤 확률로 깨져 덱에서 사라진다.
+  const broken=[];
+  for(const card of played){
+   const m=card.mod&&byId(c.mods,card.mod);
+   if(m?.breakChance){const r=nextRandom(b.rngState);b.rngState=r.seed;if(r.value<m.breakChance){broken.push(card.uid);continue;}}
+   b.discardPile.push(card);
+  }
+  if(broken.length)run.deck=run.deck.filter(x=>!broken.includes(x.uid));
+  b.damage+=res.score;b.attacksLeft--;b.attacksUsed++;run.handsPlayed[res.handId]=(run.handsPlayed[res.handId]??0)+1;
+  b.lastAttack={...res,plays:cmd.plays.map(p=>({...p,defId:played.find(x=>x.uid===p.uid).defId,mod:played.find(x=>x.uid===p.uid).mod})),broken};
+  s.events.push({type:'Attacked',score:res.score,handId:res.handId,damage:b.damage,target:b.target,broken});
+  if(b.damage>=b.target){
+   const kind=byId(c.blindKinds,b.kindId),e=c.economy;
+   const interest=Math.min(e.interestMax,Math.floor(run.gold/e.interestPer));
+   b.cashout={blindGold:kind.gold,attackGold:b.attacksLeft*e.attackGold,interest,total:kind.gold+b.attacksLeft*e.attackGold+interest};
+   const diamonds=kind.diamonds+b.attacksLeft*e.attackDiamonds;b.diamonds=diamonds;run.diamonds+=diamonds;
+   b.outcome='win';run.rngState=b.rngState;s.phase='cashout';
+   s.history.push({ante:run.ante,kindId:b.kindId,target:b.target,score:b.damage,outcome:'win',attacksUsed:b.attacksUsed,diamonds});
+   s.events.push({type:'BlindWon',diamonds,cashout:b.cashout});
+  }else if(b.attacksLeft<=0){
+   b.outcome='lose';run.result='lose';run.rngState=b.rngState;s.phase='run_result';
+   s.history.push({ante:run.ante,kindId:b.kindId,target:b.target,score:b.damage,outcome:'lose',attacksUsed:b.attacksUsed,diamonds:0});
+   s.events.push({type:'BlindLost'},{type:'RunEnded',result:'lose'});
+  }else{drawCards(b,c.balance.handSize);rollSilence(b,run.team.characters);}
   break;
  }
- case 'ShuffleRewards':{
-  if(s.phase!=='reward_reveal')return fail('phase');s.phase='reward_pick';s.events.push({type:'RewardsShuffled',swaps:s.reward.swaps});break;
+ case 'Discard':{
+  if(s.phase!=='battle')return fail('phase');if(b.discardsLeft<=0)return fail('noDiscards');
+  const uids=cmd.uids;if(!Array.isArray(uids)||!uids.length)return fail('empty');if(uids.length>c.balance.maxPlay)return fail('tooMany');
+  if(new Set(uids).size!==uids.length||uids.some(u=>!b.hand.some(x=>x.uid===u)))return fail('card');
+  b.discardPile.push(...b.hand.filter(x=>uids.includes(x.uid)));b.hand=b.hand.filter(x=>!uids.includes(x.uid));b.discardsLeft--;
+  drawCards(b,c.balance.handSize);s.events.push({type:'Discarded',uids});break;
  }
- case 'PickReward':{
-  if(s.phase!=='reward_pick')return fail('phase');const p=cmd.position;
-  if(!Number.isInteger(p)||p<0||p>=s.reward.order.length)return fail('target');
-  const offer=s.reward.offers[s.reward.order[p]];applyReward(s.run,offer);s.reward.picked=p;s.phase='reward_done';
-  s.events.push({type:'RewardPicked',position:p,offer,level:s.run.levels[offer.key]});break;
+ case 'CashOut':{
+  if(s.phase!=='cashout')return fail('phase');
+  run.gold+=b.cashout.total;
+  if(isFinalBlind(run,c)){run.result='win';s.phase='run_result';s.events.push({type:'RunEnded',result:'win'});break;}
+  advanceBlind(run,c);openShop(s,c);s.events.push({type:'ShopOpened'});break;
  }
- case 'StartNextBlind':{
-  if(s.phase!=='reward_done')return fail('phase');s.reward=null;s.run.blindIndex++;startBlind(s,c);break;
+ case 'BuyCharacter':{
+  if(s.phase!=='shop')return fail('phase');const o=s.shop.characters[cmd.index];if(!o||o.sold)return fail('target');
+  if(run.gold<o.cost)return fail('gold');const slot=placeCharacter(run,o.defId);if(slot<0)return fail('full');
+  run.gold-=o.cost;o.sold=true;s.events.push({type:'CharacterJoined',slot,defId:o.defId});break;
  }
+ case 'BuyItem':{
+  if(s.phase!=='shop')return fail('phase');const o=s.shop.items[cmd.index];if(!o||o.sold)return fail('target');
+  const item=byId(c.items,o.itemId);if(run.gold<o.cost)return fail('gold');
+  if(['mod','remove','copy'].includes(item.effect)){s.pick={index:cmd.index,itemId:item.id};s.phase='deck_pick';break;}
+  run.gold-=o.cost;o.sold=true;
+  if(item.effect==='handLevel'){const id=randomHand(run,c);levelUp(run,id,1);s.events.push({type:'HandLeveled',handId:id,level:run.levels[id]});}
+  else{
+   let r=nextRandom(run.rngState);const def=c.stickers[Math.floor(r.value*c.stickers.length)];
+   const m=weightedPick(c.addStickerMods,r.seed);run.rngState=m.seed;const card=newCard(run,def.id,m.item.mod);run.deck.push(card);
+   s.events.push({type:'CardAdded',card});
+  }
+  break;
+ }
+ case 'PickDeckCards':{
+  if(s.phase!=='deck_pick')return fail('phase');const o=s.shop.items[s.pick.index],item=byId(c.items,o.itemId),uids=cmd.uids;
+  if(!Array.isArray(uids)||!uids.length||uids.length>item.pick||new Set(uids).size!==uids.length||uids.some(u=>!run.deck.some(x=>x.uid===u)))return fail('card');
+  if(run.gold<o.cost)return fail('gold');
+  if(item.effect==='remove'&&run.deck.length-uids.length<c.balance.handSize)return fail('deckSize');
+  run.gold-=o.cost;o.sold=true;
+  if(item.effect==='mod')run.deck=run.deck.map(x=>uids.includes(x.uid)?{...x,mod:item.mod}:x);
+  else if(item.effect==='remove')run.deck=run.deck.filter(x=>!uids.includes(x.uid));
+  else for(const u of uids){const src=run.deck.find(x=>x.uid===u);run.deck.push(newCard(run,src.defId,src.mod));}
+  s.events.push({type:'DeckEdited',effect:item.effect,uids,mod:item.mod??null});s.pick=null;s.phase='shop';break;
+ }
+ case 'CancelPick':{if(s.phase!=='deck_pick')return fail('phase');s.pick=null;s.phase='shop';break;}
+ case 'Reroll':{
+  if(s.phase!=='shop')return fail('phase');const cost=rerollCost(s,c);if(run.gold<cost)return fail('gold');
+  run.gold-=cost;if(s.shop.freeRerolls>0)s.shop.freeRerolls--;else s.shop.rerolls++;stockShop(s,c);s.events.push({type:'ShopRerolled'});break;
+ }
+ case 'BuySlot':{
+  if(s.phase!=='shop')return fail('phase');const cost=slotCost(run,c);if(cost==null)return fail('maxSlots');if(run.gold<cost)return fail('gold');
+  run.gold-=cost;run.team.characters.push(null);s.events.push({type:'SlotAdded',slots:run.team.characters.length});break;
+ }
+ case 'SellCharacter':{
+  if(!['shop','blind_select'].includes(s.phase))return fail('phase');const u=run.team.characters[cmd.slot];if(!u)return fail('target');
+  if(run.team.characters.filter(Boolean).length<=1)return fail('lastCharacter');
+  run.gold+=sellValue(u,c);run.team.characters[cmd.slot]=null;s.events.push({type:'CharacterSold',slot:cmd.slot,defId:u.characterDefId});break;
+ }
+ case 'MoveCharacter':{
+  if(!['shop','blind_select','battle'].includes(s.phase))return fail('phase');const ch=run.team.characters,{from,to}=cmd;
+  if(![from,to].every(i=>Number.isInteger(i)&&i>=0&&i<ch.length)||from===to||!ch[from])return fail('target');
+  [ch[from],ch[to]]=[ch[to],ch[from]];
+  // 침묵은 자리 기준이 아니라 캐릭터 기준으로 따라간다.
+  if(b&&s.phase==='battle'&&b.silencedSlot!=null)b.silencedSlot=b.silencedSlot===from?to:b.silencedSlot===to?from:b.silencedSlot;
+  s.events.push({type:'CharacterMoved',from,to});break;
+ }
+ case 'LeaveShop':{if(s.phase!=='shop')return fail('phase');s.shop=null;s.battle=null;s.phase='blind_select';break;}
  case 'RestartRun':return {state:initialState(),error:null,events:[{type:'RunReset'}]};
  default:return fail('command');
  }
  s.appliedCommandIds.push(cmd.commandId);return {state:s,error:null,events:s.events};
 }
 
-return {initialState,projectedScore,attachLimitFor,applyCommand};})();
+return {initialState,blindInfo,targetOf,isFinalBlind,previewAttack,requiredPlay,validateAttack,rerollCost,slotCost,sellValue,applyCommand};})();

@@ -1,127 +1,118 @@
 modules["src/domain/rules.mjs"]=(()=>{
 const {byId}=modules["src/content/data.mjs"];
 
-// 캐릭터 1명: 무기 1칸(강화 수치), 속성 1칸(레벨), 별 레벨. 강화·레벨 상한은 없다.
-function makeUnit(id,defId){return {instanceId:id,characterDefId:defId,weaponId:null,weaponPlus:0,elementId:null,elementLevel:0,starLevel:0};}
+// 캐릭터 1명: 무기 1칸(강화), 속성 1칸(Lv), 별 Lv, charge(축적 지팡이 누적 배율). 상한은 없다.
+function makeUnit(id,defId){return {instanceId:id,characterDefId:defId,weaponId:null,weaponPlus:0,elementId:null,elementLevel:0,starLevel:0,charge:0};}
 function attachmentReason(unit,sticker,c){
  if(!unit)return 'target';if(!sticker)return 'card';
- if(sticker.kind==='weapon'){
-  if(unit.weaponId===sticker.payloadId&&c.attachRules.sameWeapon==='reject')return 'same';
-  const def=byId(c.characters,unit.characterDefId),w=byId(c.weapons,sticker.payloadId);
-  if(!w.compatibleRigIds.includes(c.visuals[def.visualProfileId].rigId))return 'rig';
- }
+ if(sticker.kind==='weapon'){const def=byId(c.characters,unit.characterDefId),w=byId(c.weapons,sticker.payloadId);if(!w.compatibleRigIds.includes(c.visuals[def.visualProfileId].rigId))return 'rig';}
  return null;
 }
 // 별은 Lv+1. 같은 속성은 Lv+1, 다른 속성은 교체하고 Lv1부터. 같은 무기는 강화 +1, 다른 무기는 교체하고 +0부터.
-function attachUnit(unit,sticker,c){
- const reason=attachmentReason(unit,sticker,c);if(reason)return {reason,unit};
- if(sticker.kind==='star')return {reason:null,unit:{...unit,starLevel:unit.starLevel+sticker.starAmount}};
- if(sticker.kind==='element')return {reason:null,unit:{...unit,elementId:sticker.payloadId,elementLevel:unit.elementId===sticker.payloadId?unit.elementLevel+1:1}};
- return {reason:null,unit:{...unit,weaponId:sticker.payloadId,weaponPlus:unit.weaponId===sticker.payloadId?(unit.weaponPlus??0)+1:0}};
+function attachUnit(unit,sticker){
+ if(sticker.kind==='star')return {...unit,starLevel:unit.starLevel+1};
+ if(sticker.kind==='element')return {...unit,elementId:sticker.payloadId,elementLevel:unit.elementId===sticker.payloadId?unit.elementLevel+1:1};
+ return {...unit,weaponId:sticker.payloadId,weaponPlus:unit.weaponId===sticker.payloadId?(unit.weaponPlus??0)+1:0};
 }
-const members=team=>team.characters.filter(Boolean);
-// 런 레벨표: 레시피 ID와 족보 종류(collection·triple)별 레벨. 없으면 Lv1.
+function recipeFor(unit,c){return unit?c.weaponRecipes.find(r=>r.weaponId===unit.weaponId&&r.elementId===unit.elementId)??null:null;}
 const levelOf=(levels,key)=>levels?.[key]??1;
-const byLevel=(value,perLevel,level)=>value+perLevel*(level-1);
-function axisValue(u,axis,c){
- const def=byId(c.characters,u.characterDefId);
- return axis==='race'?def.raceId:axis==='job'?def.jobId:axis==='weapon'?u.weaponId:axis==='element'?u.elementId:null;
+const growthOf=u=>(u.weaponPlus??0)+u.starLevel+u.elementLevel;
+
+// ── 족보 판정 ──
+// 같은 스티커 = 같은 스티커 정의(검·활·지팡이·불·물·번개·별).
+const ELEMENTS=['sticker_fire','sticker_water','sticker_lightning'],WEAPONS=['sticker_sword','sticker_bow','sticker_staff'];
+function classify(ids){
+ const counts={};ids.forEach(id=>counts[id]=(counts[id]??0)+1);
+ const v=Object.values(counts).sort((a,b)=>b-a),top=v[0]??0,second=v[1]??0,has=list=>list.every(id=>counts[id]);
+ const out=[];
+ if(top>=5)out.push('five');if(top>=4)out.push('four');if(top>=3&&second>=2)out.push('fullHouse');if(top>=3)out.push('triple');
+ if(has(ELEMENTS))out.push('triElement');if(has(WEAPONS))out.push('triWeapon');
+ if(top>=2&&second>=2)out.push('twoPair');if(top>=2)out.push('pair');
+ out.push('single');return out;
 }
-// 3명 기준 판정: 모두 같으면 triple, 모두 다르면 collection. 3명이 아니거나 값이 빈 캐릭터가 있으면 불성립. 페어는 없다.
-function patternOf(us,axis,c){
- if(us.length!==3)return null;
- const vs=us.map(u=>axisValue(u,axis,c));if(vs.some(v=>!v))return null;
- const n=new Set(vs).size;return n===1?{kind:'triple',value:vs[0]}:n===3?{kind:'collection',value:null}:null;
+function handValue(handId,levels,c,flat=false){const h=byId(c.hands,handId),lv=flat?1:levelOf(levels,handId);return {level:lv,chips:h.chips+h.perChips*(lv-1),mult:h.mult+h.perMult*(lv-1)};}
+// defIds: 낸 스티커 정의 ID. opts.elementsSame: 무지개 활(속성 스티커를 모두 같은 스티커로). opts.flat: 족보 하향(레벨 1).
+function evaluateHand(defIds,levels,c,{elementsSame=false,flat=false}={}){
+ const ids=elementsSame?defIds.map(id=>ELEMENTS.includes(id)?'element':id):defIds;
+ const best=classify(ids).map(id=>({id,rank:byId(c.hands,id).rank,...handValue(id,levels,c,flat)})).sort((a,b)=>b.rank-a.rank||b.chips*b.mult-a.chips*a.mult)[0];
+ return {handId:best.id,level:best.level,chips:best.chips,mult:best.mult};
 }
-// 족보(무기·속성 축). 족보 레벨이 보너스(×Lv)와 배율(1+0.25(Lv−1))을 정한다.
-function evaluateCombos(team,c,levels){
- const us=members(team),found=[];
- for(const axis of c.comboAxes){
-  const p=patternOf(us,axis,c);if(!p)continue;
-  const rule=c.combos.find(r=>r.axis===axis&&r.kind===p.kind),lv=levelOf(levels,rule.levelKind);
-  found.push({ruleId:rule.id,axis,kind:rule.kind,levelKind:rule.levelKind,level:lv,matchedValueId:p.value,memberInstanceIds:us.map(u=>u.instanceId),bonus:rule.flatPowerBonus*byLevel(1,c.balance.comboBonusPerLevel,lv),multiplier:byLevel(1,c.balance.comboMultPerLevel,lv),priority:rule.priority,complete:true});
- }
- return found;
-}
-// 보스 규칙의 효과 종류. blind.ruleId가 없으면 null.
-const sealOf=(blind,c)=>blind?.ruleId?byId(c.bossRules,blind.ruleId).seal:null;
-// 화면·이벤트용 이름 유지. 족보를 끄는 보스 규칙은 이제 없다.
-function activeCombos(team,c,levels){return evaluateCombos(team,c,levels);}
-// 무기 기초 점수: 무기 기본값 + 강화 수치 × weaponPlusPower.
-function weaponPower(u,c){return u.weaponId?byId(c.weapons,u.weaponId).powerBonus+(u.weaponPlus??0)*c.balance.weaponPlusPower:0;}
-function recipeFor(unit,c){return c.weaponRecipes.find(r=>r.weaponId===unit.weaponId&&r.elementId===unit.elementId)??null;}
-// T1: 레시피가 있으면 조건 없이 t1Power × 레시피 Lv. 캐릭터당 하나.
-function t1Of(unit,c,levels){const r=recipeFor(unit,c);if(!r)return null;const level=levelOf(levels,r.id);return {instanceId:unit.instanceId,recipeId:r.id,name:r.name,level,power:c.balance.t1Power*level};}
-// T2(종족)·T3(직업): 원정대 단위. 성립하면 점수 전체에 배율을 곱한다.
-function evaluateTiers(team,c){
- const us=members(team),pick=(tier,axis)=>{const p=patternOf(us,axis,c);return p?c.tierCombos.find(t=>t.tier===tier&&t.axis===axis&&t.kind===p.kind)??null:null;};
- return {t2:pick(2,'race'),t3:pick(3,'job')};
-}
-const jobMatches=(u,c)=>c.jobWeapon[byId(c.characters,u.characterDefId).jobId]===u.weaponId;
-function jobWeaponOk(pattern,chars,c){
- const m=chars.map(u=>jobMatches(u,c));
- return pattern==='allMatch'?m.every(Boolean):pattern==='allMismatch'?m.every(x=>!x):pattern==='centerMatch'?(m[1]&&!m[0]&&!m[2]):true;
-}
-// T4: 원정대 3명 모두 T1이 있고 조건을 만족하는 규칙 전부. 슬롯 순서(가운데 = 1번)를 쓴다.
-function activeT4(team,c){
- const chars=team.characters;if(chars.length!==3||chars.some(u=>!u)||chars.some(u=>!recipeFor(u,c)))return [];
- const tiers=evaluateTiers(team,c);
- return c.t4Rules.filter(r=>tiers.t2?.kind===r.race&&tiers.t3?.kind===r.job
-  &&(!r.jobWeapon||jobWeaponOk(r.jobWeapon,chars,c))
-  &&(!r.elements||new Set(chars.map(u=>u.elementId)).size===3)
-  &&(!r.sameRecipe||new Set(chars.map(u=>recipeFor(u,c).id)).size===1));
-}
-// 지금 편성으로 턴당 붙이기에 더해지는 횟수(진형 등).
-function attachBonusOf(team,c){return activeT4(team,c).reduce((n,r)=>n+(r.attachBonus??0),0);}
-// 캐릭터마다 블라인드 속성과 비교한다. 유리 ×(1+k·Lv), 불리 ÷(1+k·Lv), 무관 ×1.
-// invert: 보스 규칙 상성 반전(유리↔불리). flip: 원소 공명(남은 불리를 유리로). 원정대에는 3명 배율의 산술 평균을 곱한다.
-function relationOf(elementId,blindElementId,c){
+
+// ── 상성 ──
+function relationOf(elementId,blindElementId,c,invert=false){
  if(!elementId||!blindElementId)return 'neutral';
- return c.affinity.beats[elementId]===blindElementId?'advantage':c.affinity.beats[blindElementId]===elementId?'disadvantage':'neutral';
+ let r=c.affinity.beats[elementId]===blindElementId?'advantage':c.affinity.beats[blindElementId]===elementId?'disadvantage':'neutral';
+ if(invert&&r!=='neutral')r=r==='advantage'?'disadvantage':'advantage';
+ return r;
 }
-function evaluateAffinity(team,blindElementId,c,{invert=false,flip=false}={}){
- const units=[];
- for(const u of members(team)){
-  let relation=relationOf(u.elementId,blindElementId,c);
-  if(invert&&relation!=='neutral')relation=relation==='advantage'?'disadvantage':'advantage';
-  if(flip&&relation==='disadvantage')relation='advantage';
-  const f=1+c.balance.affinityPerLevel*u.elementLevel,multiplier=relation==='advantage'?f:relation==='disadvantage'?1/f:1;
-  units.push({instanceId:u.instanceId,relation,multiplier});
+
+// ── 공격 점수 ──
+// ctx: {team:[unit|null], plays:[{card:{uid,defId,mod},targetInstanceId}], levels, blind:{elementId,effect,silencedSlot}, discardsLeft, lastAttack}
+// 반환: 족보, 단계(steps: 화면 연출과 내역), 칩·배율·점수, 공격 뒤 원정대(장비·강화·누적이 반영됨).
+// 순서: 족보 → 낸 스티커(왼쪽 캐릭터부터, 같은 캐릭터는 낸 순서) → 캐릭터 왼쪽부터(기본 능력, 조합 무기).
+function scoreAttack(ctx,c){
+ const b=c.balance,effect=ctx.blind?.effect??null,silenced=effect==='silence'?ctx.blind.silencedSlot:null;
+ const team=ctx.team.map(u=>u&&{...u});
+ const slotOf=id=>team.findIndex(u=>u?.instanceId===id);
+ const plays=ctx.plays.map((p,i)=>({...p,i,slot:slotOf(p.targetInstanceId)})).sort((a,b)=>a.slot-b.slot||a.i-b.i);
+ // 1) 붙이기: 카드마다 그 순간의 캐릭터 상태를 기억해 둔다(같은 캐릭터에 두 장이면 두 번째는 강화된 상태로 계산).
+ const snaps=plays.map(p=>{const s=byId(c.stickers,p.card.defId);team[p.slot]=attachUnit(team[p.slot],s);return {...team[p.slot]};});
+ const active=i=>team[i]&&i!==silenced;
+ const elementsSame=team.some((u,i)=>active(i)&&recipeFor(u,c)?.ability==='elementsSame');
+ const hand=evaluateHand(plays.map(p=>p.card.defId),ctx.levels,c,{elementsSame,flat:effect==='flatHands'});
+ let chips=hand.chips,mult=hand.mult;const steps=[];
+ const step=(src,extra,label,d)=>{
+  if(d.chips)chips+=d.chips;if(d.mult)mult+=d.mult;if(d.xmult)mult*=d.xmult;
+  steps.push({src,...extra,label,chips:d.chips??0,mult:d.mult??0,xmult:d.xmult??1,totalChips:chips,totalMult:mult});
+ };
+ step('hand',{},`${byId(c.hands,hand.handId).name} Lv${hand.level}`,{});
+ // 2) 스티커
+ const counts={weapon:0,element:0};
+ plays.forEach((p,k)=>{
+  const s=byId(c.stickers,p.card.defId),u=snaps[k],at={slot:p.slot,uid:p.card.uid};counts[s.kind]=(counts[s.kind]??0)+1;
+  if(s.kind==='weapon')step('card',at,'무기',{chips:effect==='weaponSeal'?0:b.weaponChips+b.weaponPlusChips*u.weaponPlus});
+  else if(s.kind==='star')step('card',at,'별',{chips:effect==='starSeal'?0:b.starChips*u.starLevel});
+  else{
+   const rel=relationOf(u.elementId,ctx.blind?.elementId,c,effect==='invertAffinity'),seal=effect==='elementSeal';
+   step('card',at,rel==='advantage'&&!seal?'속성 ▲':rel==='disadvantage'&&!seal?'속성 ▼':'속성',{chips:b.elementChips,mult:seal||rel==='disadvantage'?0:u.elementLevel*(rel==='advantage'?b.advantageMult:1)});
+  }
+  const m=p.card.mod&&byId(c.mods,p.card.mod);
+  if(m)step('card',at,m.name,{chips:m.chips,mult:m.mult,xmult:m.xmult});
+ });
+ // 3) 캐릭터
+ const passive=(i,by=i)=>{
+  if(!active(i))return;const u=team[i],d=byId(c.characters,u.characterDefId),at={slot:i,by};
+  const n=d.trigger==='pairHand'?(c.pairHands.includes(hand.handId)?1:0):d.trigger==='elementCard'?counts.element:d.trigger==='weaponCard'?counts.weapon:growthOf(u);
+  if(!n)return;
+  if(d.effect==='chips')step('unit',at,'능력',{chips:d.value*n});
+  else if(d.effect==='mult')step('unit',at,'능력',{mult:d.value*n});
+  else step('unit',at,'능력',{xmult:d.trigger==='growth'?1+d.value*n:d.value**n});
+ };
+ for(let i=0;i<team.length;i++){
+  if(!active(i))continue;
+  passive(i);
+  const r=recipeFor(team[i],c);if(!r)continue;const at={slot:i,recipe:r.id};
+  switch(r.ability){
+  case 'retriggerSelf':passive(i);break;
+  case 'retriggerRight':if(i+1<team.length)passive(i+1,i);break;
+  case 'retriggerLeft':if(i>0)passive(i-1,i);break;
+  case 'chipsPerDiscard':if(ctx.discardsLeft)step('unit',at,r.name,{chips:r.value*ctx.discardsLeft});break;
+  case 'autoEnhance':team[i]={...team[i],weaponPlus:team[i].weaponPlus+r.value};steps.push({src:'unit',...at,label:`${r.name} 강화 +${r.value}`,chips:0,mult:0,xmult:1,totalChips:chips,totalMult:mult,note:true});break;
+  case 'lastAttackXMult':if(ctx.lastAttack)step('unit',at,r.name,{xmult:r.value});break;
+  case 'allDifferentXMult':if(new Set(plays.map(p=>p.card.defId)).size===plays.length&&plays.length>1)step('unit',at,r.name,{xmult:r.value});break;
+  case 'charge':team[i]={...team[i],charge:(team[i].charge??0)+r.value};step('unit',at,r.name,{mult:team[i].charge});break;
+  }
  }
- const average=units.length?units.reduce((n,x)=>n+x.multiplier,0)/units.length:1;
- return {average,units};
+ // 모든 계산 뒤에만 소수점 버림. 경계의 부동소수점 오차만 보정한다.
+ const raw=chips*mult,score=Math.floor(raw+Number.EPSILON*Math.max(1,Math.abs(raw))*8);
+ return {handId:hand.handId,level:hand.level,steps,chips,mult,score,team,elementsSame};
 }
-// 점수 = floor((캐릭터 덧셈 + 족보 보너스) × 상성 평균 × 족보 레벨 배율 × T2 배율 × T3 배율 × T4 배율).
-// T4 배율: 성립한 T4 배율의 합(같은 티어끼리는 더한다). 없으면 1.
-// 캐릭터 덧셈 = 기본 + 무기(강화 포함) + 별 + T1. 봉인은 해당 점수(T2·T3는 배율 ×1)만 끄고 T4 조건 판정에는 영향이 없다.
-// opts.burst: 판정 때 굴린 확률 효과(운명의 일족)가 터졌는지. 미리보기는 false.
-function scoreTeam(team,blind,progress,c,opts={}){
- const levels=progress?.levels??{},us=members(team),seal=sealOf(blind,c);
- const base=us.reduce((n,u)=>n+byId(c.characters,u.characterDefId).basePower,0);
- const weapons=seal==='weapon'?0:us.reduce((n,u)=>n+weaponPower(u,c),0);
- const stars=seal==='star'?0:us.reduce((n,u)=>n+u.starLevel*c.balance.starPower,0);
- const t1Units=us.map(u=>t1Of(u,c,levels)).filter(Boolean),t1=seal==='t1'?0:t1Units.reduce((n,x)=>n+x.power,0);
- const matches=evaluateCombos(team,c,levels),combos=matches.reduce((n,m)=>n+m.bonus,0);
- const tiers=evaluateTiers(team,c),t2Multiplier=seal==='t2'?1:tiers.t2?.multiplier??1,t3Multiplier=seal==='t3'?1:tiers.t3?.multiplier??1;
- const t4Rules=activeT4(team,c);
- const affinity=evaluateAffinity(team,blind?.elementId,c,{invert:seal==='invertAffinity',flip:t4Rules.some(r=>r.flipDisadvantage)});
- const comboMultiplier=matches.reduce((n,m)=>n*m.multiplier,1);
- const t4=t4Rules.map(r=>({id:r.id,name:r.name,multiplier:r.multiplier*(opts.burst&&r.chance?r.chanceMultiplier:1),burst:!!(opts.burst&&r.chance)}));
- const t4Multiplier=t4.length?t4.reduce((n,x)=>n+x.multiplier,0):1;
- const chips=base+weapons+stars+t1+combos,multiplier=affinity.average*comboMultiplier*t2Multiplier*t3Multiplier*t4Multiplier;
- // 모든 배율을 합성한 뒤에만 소수점 버림. 경계의 부동소수점 오차만 보정한다.
- const floor=v=>Math.floor(v+Number.EPSILON*Math.max(1,Math.abs(v))*8);
- return {base,weapons,stars,t1,t1Units,combos,matches,tiers,t2Multiplier,t3Multiplier,t4,t4Multiplier,affinity,comboMultiplier,chips,multiplier,score:floor(chips*multiplier)};
-}
+
 // 시드 기반 RNG: 순수한 상태 입출력. 같은 시드와 명령은 같은 결과를 만든다.
 function nextRandom(seed){let x=seed>>>0||1;x^=x<<13;x^=x>>>17;x^=x<<5;return {seed:x>>>0,value:(x>>>0)/4294967296};}
 function shuffle(list,seed){const result=[...list];for(let i=result.length-1;i>0;i--){const r=nextRandom(seed);seed=r.seed;const j=Math.floor(r.value*(i+1));[result[i],result[j]]=[result[j],result[i]];}return {list:result,seed};}
 function weightedPick(items,seed){const r=nextRandom(seed);let x=r.value*items.reduce((n,i)=>n+i.weight,0);for(const item of items)if((x-=item.weight)<0)return {item,seed:r.seed};return {item:items[items.length-1],seed:r.seed};}
-function drawCards(b,count){
- for(let i=0;i<count;i++){
-  if(!b.drawPile.length&&b.discardPile.length){const r=shuffle(b.discardPile,b.rngState);b.drawPile=r.list;b.rngState=r.seed;b.discardPile=[];}
-  if(!b.drawPile.length)break;b.hand.push(b.drawPile.pop());
- }
-}
+// 블라인드 안에서는 다시 섞지 않는다. 덱이 바닥나면 손패가 줄어든다.
+function drawCards(b,handSize){while(b.hand.length<handSize&&b.drawPile.length)b.hand.push(b.drawPile.pop());}
 
-return {makeUnit,attachmentReason,attachUnit,levelOf,evaluateCombos,activeCombos,weaponPower,recipeFor,t1Of,evaluateTiers,activeT4,attachBonusOf,relationOf,evaluateAffinity,scoreTeam,sealOf,nextRandom,shuffle,weightedPick,drawCards};})();
+return {makeUnit,attachmentReason,attachUnit,recipeFor,levelOf,growthOf,evaluateHand,handValue,relationOf,scoreAttack,nextRandom,shuffle,weightedPick,drawCards};})();

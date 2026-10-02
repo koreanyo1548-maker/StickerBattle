@@ -33,7 +33,7 @@ const tierCombos=[
 ];
 // 직업-무기 짝. 상시 보너스는 없고 T4 조건(일치·불일치) 판정에만 쓴다.
 const jobWeapon={job_warrior:'weapon_sword',job_archer:'weapon_bow',job_mage:'weapon_staff'};
-// T4: 원정대 3명 모두 T1이 있고 아래 조건을 만족하면 성립. 여러 개가 동시에 성립할 수 있고 배율은 서로 곱한다.
+// T4: 원정대 3명 모두 T1이 있고 아래 조건을 만족하면 성립. 여러 개가 동시에 성립할 수 있고 배율은 서로 더한다.
 // jobWeapon: allMatch(모두 일치)·allMismatch(모두 불일치)·centerMatch(가운데만 일치).
 // 배율은 성립 난이도 순서(tier-bot 전용 정책 성립률: 공명·진형 33% > 반역자 16% > 정통 7% > 운명 4%)에 맞춘다. 진형은 붙이기 +1이 있어 공명보다 낮다.
 const t4Rules=[

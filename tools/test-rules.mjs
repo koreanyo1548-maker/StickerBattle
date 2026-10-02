@@ -81,10 +81,10 @@ test('T4: 다섯 규칙의 성립 경계', () => {
   // 진형: 가운데만 일치. 속성이 겹쳐 원소 공명은 불성립
   const formation = team(u(0, 'human_warrior', 'bow', 'fire'), u(1, 'elf_archer', 'bow', 'fire'), u(2, 'orc_mage', 'sword', 'water'));
   assert.deepEqual(ids(formation), ['t4_formation']);
-  // 진형 + 원소 공명 동시 성립: 배율은 곱한다
+  // 진형 + 원소 공명 동시 성립: 같은 티어끼리는 배율을 더한다
   const both = team(u(0, 'human_warrior', 'bow', 'fire'), u(1, 'elf_archer', 'bow', 'water'), u(2, 'orc_mage', 'sword', 'lightning'));
   assert.deepEqual(ids(both), ['t4_formation', 't4_resonance']);
-  near(rules.scoreTeam(both, blind(), { levels: {} }, c).t4Multiplier, 1.5 * 1.75);
+  near(rules.scoreTeam(both, blind(), { levels: {} }, c).t4Multiplier, 1.5 + 1.75);
   // T1이 없는 캐릭터가 있으면 T4 불성립
   assert.deepEqual(ids(team(u(0, 'human_warrior', 'sword', 'fire'), u(1, 'human_archer', 'bow', 'fire'), unit(2, 'human_mage', { weaponId: 'weapon_staff' }))), []);
 });

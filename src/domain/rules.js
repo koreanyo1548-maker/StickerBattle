@@ -91,7 +91,8 @@ function evaluateAffinity(team,blindElementId,c,{invert=false,flip=false}={}){
  const average=units.length?units.reduce((n,x)=>n+x.multiplier,0)/units.length:1;
  return {average,units};
 }
-// 점수 = floor((캐릭터 덧셈 + 족보 보너스) × 상성 평균 × 족보 레벨 배율 × T2 배율 × T3 배율 × Π T4 배율).
+// 점수 = floor((캐릭터 덧셈 + 족보 보너스) × 상성 평균 × 족보 레벨 배율 × T2 배율 × T3 배율 × T4 배율).
+// T4 배율: 성립한 T4 배율의 합(같은 티어끼리는 더한다). 없으면 1.
 // 캐릭터 덧셈 = 기본 + 무기(강화 포함) + 별 + T1. 봉인은 해당 점수(T2·T3는 배율 ×1)만 끄고 T4 조건 판정에는 영향이 없다.
 // opts.burst: 판정 때 굴린 확률 효과(운명의 일족)가 터졌는지. 미리보기는 false.
 function scoreTeam(team,blind,progress,c,opts={}){
@@ -106,7 +107,7 @@ function scoreTeam(team,blind,progress,c,opts={}){
  const affinity=evaluateAffinity(team,blind?.elementId,c,{invert:seal==='invertAffinity',flip:t4Rules.some(r=>r.flipDisadvantage)});
  const comboMultiplier=matches.reduce((n,m)=>n*m.multiplier,1);
  const t4=t4Rules.map(r=>({id:r.id,name:r.name,multiplier:r.multiplier*(opts.burst&&r.chance?r.chanceMultiplier:1),burst:!!(opts.burst&&r.chance)}));
- const t4Multiplier=t4.reduce((n,x)=>n*x.multiplier,1);
+ const t4Multiplier=t4.length?t4.reduce((n,x)=>n+x.multiplier,0):1;
  const chips=base+weapons+stars+t1+combos,multiplier=affinity.average*comboMultiplier*t2Multiplier*t3Multiplier*t4Multiplier;
  // 모든 배율을 합성한 뒤에만 소수점 버림. 경계의 부동소수점 오차만 보정한다.
  const floor=v=>Math.floor(v+Number.EPSILON*Math.max(1,Math.abs(v))*8);

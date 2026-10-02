@@ -209,7 +209,7 @@ function stepItems(r){
  if(r.comboMultiplier!==1)items.push(`<li class="mul" data-mul="${r.comboMultiplier}" data-src="tray">족보 Lv<b>×${number(r.comboMultiplier)}</b></li>`);
  if(r.t2Multiplier!==1)items.push(`<li class="mul" data-mul="${r.t2Multiplier}" data-src="tray">${r.tiers.t2.name}<b>×${number(r.t2Multiplier)}</b></li>`);
  if(r.t3Multiplier!==1)items.push(`<li class="mul" data-mul="${r.t3Multiplier}" data-src="tray">${r.tiers.t3.name}<b>×${number(r.t3Multiplier)}</b></li>`);
- for(const t of r.t4)items.push(`<li class="mul" data-mul="${t.multiplier}" data-src="tray">${t.name}${t.burst?' 폭발!':''}<b>×${number(t.multiplier)}</b></li>`);
+ if(r.t4.length)items.push(`<li class="mul" data-mul="${r.t4Multiplier}" data-src="tray">${r.t4.map(t=>`${t.name}${t.burst?' 폭발!':''}`).join(' + ')}<b>×${number(r.t4Multiplier)}</b></li>`);
  return items.join('');
 }
 function resolveDock(){
@@ -560,7 +560,7 @@ function showRules(){const t=c.balance;openInfo(`<h2>원정 규칙</h2><ol>
 <li><b>속성</b>: 같은 속성을 붙이면 Lv+1, 다른 속성을 붙이면 교체되고 Lv1부터 다시 시작해요.</li>
 <li><b>무기</b>: 기초 +${t.weaponPower}. 같은 무기를 또 붙이면 강화 +1(기초 +${t.weaponPlusPower}씩), 다른 무기를 붙이면 교체되고 강화는 +0부터. 무기와 속성이 함께 있으면 조합 무기(T1, +${t.t1Power} × 레시피 Lv)가 돼요.</li>
 <li><b>종족·직업 조합</b>: 3명의 종족이 모두 같거나 모두 다르면 T2, 직업이 그러면 T3. 점수 전체에 배율이 곱해져요.</li>
-<li><b>T4</b>: 3명 모두 조합 무기가 있고 종족·직업 조합과 추가 조건을 맞추면 성립해요. 점수 전체에 배율이 곱해지고, 여러 개가 함께 성립할 수 있어요.</li>
+<li><b>T4</b>: 3명 모두 조합 무기가 있고 종족·직업 조합과 추가 조건을 맞추면 성립해요. 점수 전체에 배율이 곱해져요. 여러 개가 함께 성립하면 배율끼리 더해요.</li>
 <li><b>상성</b>: ${cycleText()}. 블라인드 속성을 이기면 ×(1+${t.affinityPerLevel}×속성Lv), 지면 그만큼 나눠요. 원정대에는 3명의 평균이 곱해져요.</li>
 <li>점수는 <b>기초 × 배율</b>. 기초는 캐릭터·무기·별·조합 무기·족보 보너스의 합, 배율은 상성 평균·족보 레벨·종족 조합·직업 조합·T4를 곱한 값이에요.</li>
 <li>원정대는 블라인드가 바뀌어도 그대로예요. 블라인드를 넘기면 보상 카드 3장을 섞어 1장을 뽑아요.</li></ol><p class="note">현재 수치는 재미와 균형 확인용 임시값입니다.</p><button type="button" class="ghost help-tips" data-help="tips">처음 안내 다시 보기</button>`);}

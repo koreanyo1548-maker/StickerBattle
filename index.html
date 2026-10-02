@@ -496,7 +496,7 @@ const tierCombos=[
 ];
 // 직업-무기 짝. 상시 보너스는 없고 T4 조건(일치·불일치) 판정에만 쓴다.
 const jobWeapon={job_warrior:'weapon_sword',job_archer:'weapon_bow',job_mage:'weapon_staff'};
-// T4: 원정대 3명 모두 T1이 있고 아래 조건을 만족하면 성립. 여러 개가 동시에 성립할 수 있고 배율은 서로 곱한다.
+// T4: 원정대 3명 모두 T1이 있고 아래 조건을 만족하면 성립. 여러 개가 동시에 성립할 수 있고 배율은 서로 더한다.
 // jobWeapon: allMatch(모두 일치)·allMismatch(모두 불일치)·centerMatch(가운데만 일치).
 // 배율은 성립 난이도 순서(tier-bot 전용 정책 성립률: 공명·진형 33% > 반역자 16% > 정통 7% > 운명 4%)에 맞춘다. 진형은 붙이기 +1이 있어 공명보다 낮다.
 const t4Rules=[
@@ -693,7 +693,8 @@ function evaluateAffinity(team,blindElementId,c,{invert=false,flip=false}={}){
  const average=units.length?units.reduce((n,x)=>n+x.multiplier,0)/units.length:1;
  return {average,units};
 }
-// 점수 = floor((캐릭터 덧셈 + 족보 보너스) × 상성 평균 × 족보 레벨 배율 × T2 배율 × T3 배율 × Π T4 배율).
+// 점수 = floor((캐릭터 덧셈 + 족보 보너스) × 상성 평균 × 족보 레벨 배율 × T2 배율 × T3 배율 × T4 배율).
+// T4 배율: 성립한 T4 배율의 합(같은 티어끼리는 더한다). 없으면 1.
 // 캐릭터 덧셈 = 기본 + 무기(강화 포함) + 별 + T1. 봉인은 해당 점수(T2·T3는 배율 ×1)만 끄고 T4 조건 판정에는 영향이 없다.
 // opts.burst: 판정 때 굴린 확률 효과(운명의 일족)가 터졌는지. 미리보기는 false.
 function scoreTeam(team,blind,progress,c,opts={}){
@@ -708,7 +709,7 @@ function scoreTeam(team,blind,progress,c,opts={}){
  const affinity=evaluateAffinity(team,blind?.elementId,c,{invert:seal==='invertAffinity',flip:t4Rules.some(r=>r.flipDisadvantage)});
  const comboMultiplier=matches.reduce((n,m)=>n*m.multiplier,1);
  const t4=t4Rules.map(r=>({id:r.id,name:r.name,multiplier:r.multiplier*(opts.burst&&r.chance?r.chanceMultiplier:1),burst:!!(opts.burst&&r.chance)}));
- const t4Multiplier=t4.reduce((n,x)=>n*x.multiplier,1);
+ const t4Multiplier=t4.length?t4.reduce((n,x)=>n+x.multiplier,0):1;
  const chips=base+weapons+stars+t1+combos,multiplier=affinity.average*comboMultiplier*t2Multiplier*t3Multiplier*t4Multiplier;
  // 모든 배율을 합성한 뒤에만 소수점 버림. 경계의 부동소수점 오차만 보정한다.
  const floor=v=>Math.floor(v+Number.EPSILON*Math.max(1,Math.abs(v))*8);
@@ -1183,7 +1184,7 @@ function stepItems(r){
  if(r.comboMultiplier!==1)items.push(`<li class="mul" data-mul="${r.comboMultiplier}" data-src="tray">족보 Lv<b>×${number(r.comboMultiplier)}</b></li>`);
  if(r.t2Multiplier!==1)items.push(`<li class="mul" data-mul="${r.t2Multiplier}" data-src="tray">${r.tiers.t2.name}<b>×${number(r.t2Multiplier)}</b></li>`);
  if(r.t3Multiplier!==1)items.push(`<li class="mul" data-mul="${r.t3Multiplier}" data-src="tray">${r.tiers.t3.name}<b>×${number(r.t3Multiplier)}</b></li>`);
- for(const t of r.t4)items.push(`<li class="mul" data-mul="${t.multiplier}" data-src="tray">${t.name}${t.burst?' 폭발!':''}<b>×${number(t.multiplier)}</b></li>`);
+ if(r.t4.length)items.push(`<li class="mul" data-mul="${r.t4Multiplier}" data-src="tray">${r.t4.map(t=>`${t.name}${t.burst?' 폭발!':''}`).join(' + ')}<b>×${number(r.t4Multiplier)}</b></li>`);
  return items.join('');
 }
 function resolveDock(){
@@ -1534,7 +1535,7 @@ function showRules(){const t=c.balance;openInfo(`<h2>원정 규칙</h2><ol>
 <li><b>속성</b>: 같은 속성을 붙이면 Lv+1, 다른 속성을 붙이면 교체되고 Lv1부터 다시 시작해요.</li>
 <li><b>무기</b>: 기초 +${t.weaponPower}. 같은 무기를 또 붙이면 강화 +1(기초 +${t.weaponPlusPower}씩), 다른 무기를 붙이면 교체되고 강화는 +0부터. 무기와 속성이 함께 있으면 조합 무기(T1, +${t.t1Power} × 레시피 Lv)가 돼요.</li>
 <li><b>종족·직업 조합</b>: 3명의 종족이 모두 같거나 모두 다르면 T2, 직업이 그러면 T3. 점수 전체에 배율이 곱해져요.</li>
-<li><b>T4</b>: 3명 모두 조합 무기가 있고 종족·직업 조합과 추가 조건을 맞추면 성립해요. 점수 전체에 배율이 곱해지고, 여러 개가 함께 성립할 수 있어요.</li>
+<li><b>T4</b>: 3명 모두 조합 무기가 있고 종족·직업 조합과 추가 조건을 맞추면 성립해요. 점수 전체에 배율이 곱해져요. 여러 개가 함께 성립하면 배율끼리 더해요.</li>
 <li><b>상성</b>: ${cycleText()}. 블라인드 속성을 이기면 ×(1+${t.affinityPerLevel}×속성Lv), 지면 그만큼 나눠요. 원정대에는 3명의 평균이 곱해져요.</li>
 <li>점수는 <b>기초 × 배율</b>. 기초는 캐릭터·무기·별·조합 무기·족보 보너스의 합, 배율은 상성 평균·족보 레벨·종족 조합·직업 조합·T4를 곱한 값이에요.</li>
 <li>원정대는 블라인드가 바뀌어도 그대로예요. 블라인드를 넘기면 보상 카드 3장을 섞어 1장을 뽑아요.</li></ol><p class="note">현재 수치는 재미와 균형 확인용 임시값입니다.</p><button type="button" class="ghost help-tips" data-help="tips">처음 안내 다시 보기</button>`);}

@@ -83,7 +83,7 @@ console.log(`${N}판씩. 성립률은 블라인드 3 판정 시점. 클리어율
 const only = process.env.POLICIES?.split(',');
 for (const [name, policy] of Object.entries(policies).filter(([k]) => !only || only.includes(k))) {
   const scores = targets.map(() => []), clear = targets.map(() => 0), t4 = {}, t2 = {}, t3 = {};
-  let t1Full = 0;
+  let t1Full = 0; const own = [], miss = [];
   for (let seed = 1; seed <= N; seed++) {
     const r = playRun(policy, seed);
     r.scores.forEach((v, k) => scores[k].push(v));
@@ -91,6 +91,7 @@ for (const [name, policy] of Object.entries(policies).filter(([k]) => !only || o
     const sn = r.snap ?? { t1: 0, t2: null, t3: null, t4: [] }; if (sn.t1 === 3) t1Full++;
     if (sn.t2) t2[sn.t2] = (t2[sn.t2] ?? 0) + 1; if (sn.t3) t3[sn.t3] = (t3[sn.t3] ?? 0) + 1;
     sn.t4.forEach(id => { t4[id] = (t4[id] ?? 0) + 1; });
+    if (name.startsWith('t4_')) (sn.t4.includes(name) ? own : miss).push(r.scores[3]);
   }
   summary[name] = pct(scores[3], 0.5);
   console.log(`\n[${name}]`);
@@ -98,6 +99,7 @@ for (const [name, policy] of Object.entries(policies).filter(([k]) => !only || o
   console.log(`  클리어율: ${clear.map(share).join(' / ')}`);
   console.log(`  T1 3명: ${share(t1Full)} | T2: ${JSON.stringify(Object.fromEntries(Object.entries(t2).map(([k, v]) => [k, share(v)])))} | T3: ${JSON.stringify(Object.fromEntries(Object.entries(t3).map(([k, v]) => [k, share(v)])))}`);
   console.log(`  T4: ${JSON.stringify(Object.fromEntries(Object.entries(t4).map(([k, v]) => [k, share(v)])))}`);
+  if (own.length) console.log(`  자기 T4 성립 ${share(own.length)}: 블라인드 4 중앙값 성립 ${pct(own, 0.5)} / 불성립 ${miss.length ? pct(miss, 0.5) : '-'}`);
 }
 const ranked = Object.entries(summary).sort((a, b) => b[1] - a[1]);
 console.log(`\n블라인드 4 중앙값 순위: ${ranked.map(([k, v]) => `${k} ${v}`).join(' > ')}`);

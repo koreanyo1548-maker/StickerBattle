@@ -42,10 +42,10 @@ test('점수 공식: 손으로 계산한 예제와 일치', () => {
   // 덧셈: 기본 15 + 무기 15 + 별 (2+1+0)×3=9 + T1 10×3=30 + 족보(무기·속성 컬렉션) 20 = 89
   assert.deepEqual([r.base, r.weapons, r.stars, r.t1, r.combos, r.chips], [15, 15, 9, 30, 20, 89]);
   // 상성: 불 Lv2 유리 1.5, 물 Lv1 불리 → 원소 공명으로 유리 1.25, 번개 무관 1 → 평균 1.25. 족보 Lv1 ×1.
-  // T2 종족 컬렉션 ×1.5, T3 직업 컬렉션 ×2, T4 원소 공명 ×2 → 배율 7.5, 점수 floor(89 × 7.5) = 667
+  // T2 종족 컬렉션 ×1.5, T3 직업 컬렉션 ×2, T4 원소 공명 ×1.75 → 배율 6.5625, 점수 floor(89 × 6.5625) = 584
   near(r.affinity.average, 1.25); assert.deepEqual(r.t4.map(x => x.id), ['t4_resonance']);
   assert.deepEqual([r.t2Multiplier, r.t3Multiplier], [1.5, 2]);
-  near(r.multiplier, 7.5); assert.equal(r.score, 667);
+  near(r.multiplier, 6.5625); assert.equal(r.score, 584);
 });
 
 test('T2·T3: 트리플과 컬렉션만 성립하고 페어는 없으며, 점수 전체에 배율을 곱한다', () => {
@@ -84,7 +84,7 @@ test('T4: 다섯 규칙의 성립 경계', () => {
   // 진형 + 원소 공명 동시 성립: 배율은 곱한다
   const both = team(u(0, 'human_warrior', 'bow', 'fire'), u(1, 'elf_archer', 'bow', 'water'), u(2, 'orc_mage', 'sword', 'lightning'));
   assert.deepEqual(ids(both), ['t4_formation', 't4_resonance']);
-  assert.equal(rules.scoreTeam(both, blind(), { levels: {} }, c).t4Multiplier, 4);
+  near(rules.scoreTeam(both, blind(), { levels: {} }, c).t4Multiplier, 1.5 * 1.75);
   // T1이 없는 캐릭터가 있으면 T4 불성립
   assert.deepEqual(ids(team(u(0, 'human_warrior', 'sword', 'fire'), u(1, 'human_archer', 'bow', 'fire'), unit(2, 'human_mage', { weaponId: 'weapon_staff' }))), []);
 });

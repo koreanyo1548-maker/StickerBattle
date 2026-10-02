@@ -34,13 +34,14 @@ const tierCombos=[
 // 직업-무기 짝. 상시 보너스는 없고 T4 조건(일치·불일치) 판정에만 쓴다.
 const jobWeapon={job_warrior:'weapon_sword',job_archer:'weapon_bow',job_mage:'weapon_staff'};
 // T4: 원정대 3명 모두 T1이 있고 아래 조건을 만족하면 성립. 여러 개가 동시에 성립할 수 있고 배율은 서로 곱한다.
-// jobWeapon: allMatch(모두 일치)·allMismatch(모두 불일치)·centerMatch(가운데만 일치). 배율은 임시 시작값.
+// jobWeapon: allMatch(모두 일치)·allMismatch(모두 불일치)·centerMatch(가운데만 일치).
+// 배율은 성립 난이도 순서(tier-bot 전용 정책 성립률: 공명·진형 33% > 반역자 16% > 정통 7% > 운명 4%)에 맞춘다. 진형은 붙이기 +1이 있어 공명보다 낮다.
 const t4Rules=[
- {id:'t4_orthodox',name:'정통 원정대',race:'triple',job:'collection',jobWeapon:'allMatch',multiplier:4,text:'같은 종족, 서로 다른 직업, 모두 직업에 맞는 무기'},
- {id:'t4_rebels',name:'반역자들',race:'collection',job:'triple',jobWeapon:'allMismatch',multiplier:3,text:'서로 다른 종족, 같은 직업, 모두 직업과 다른 무기'},
- {id:'t4_resonance',name:'원소 공명',race:'collection',job:'collection',elements:'allDifferent',multiplier:2,flipDisadvantage:true,text:'종족·직업·속성이 모두 다름. 불리 상성이 유리로 바뀜'},
+ {id:'t4_orthodox',name:'정통 원정대',race:'triple',job:'collection',jobWeapon:'allMatch',multiplier:5,text:'같은 종족, 서로 다른 직업, 모두 직업에 맞는 무기'},
+ {id:'t4_rebels',name:'반역자들',race:'collection',job:'triple',jobWeapon:'allMismatch',multiplier:4,text:'서로 다른 종족, 같은 직업, 모두 직업과 다른 무기'},
+ {id:'t4_resonance',name:'원소 공명',race:'collection',job:'collection',elements:'allDifferent',multiplier:1.75,flipDisadvantage:true,text:'종족·직업·속성이 모두 다름. 불리 상성이 유리로 바뀜'},
  {id:'t4_destiny',name:'운명의 일족',race:'triple',job:'triple',sameRecipe:true,multiplier:5,chance:0.25,chanceMultiplier:2,text:'같은 종족, 같은 직업, 같은 조합 무기. 전투 때 확률로 배율 2배'},
- {id:'t4_formation',name:'진형',race:'collection',job:'collection',jobWeapon:'centerMatch',multiplier:2,attachBonus:1,text:'종족·직업이 모두 다름, 가운데만 직업에 맞는 무기. 성립 중 턴당 붙이기 +1'}
+ {id:'t4_formation',name:'진형',race:'collection',job:'collection',jobWeapon:'centerMatch',multiplier:1.5,attachBonus:1,text:'종족·직업이 모두 다름, 가운데만 직업에 맞는 무기. 성립 중 턴당 붙이기 +1'}
 ];
 // T1: 무기 + 속성 레시피. 조건 없이 성립하고 점수는 t1Power × 레시피 Lv.
 const weaponRecipes=[

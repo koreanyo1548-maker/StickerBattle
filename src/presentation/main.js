@@ -190,8 +190,8 @@ function renderShop(){
  return stageTop('상점')+`<main class="shop">
  <section class="zone"><div class="zone-head"><strong>${uiIcon('people')} 원정대</strong><button type="button" class="link" data-action="deck">${uiIcon('cards')} 덱 ${r.deck.length}장</button></div>${partyRow('shop')}
  <button type="button" class="slot-buy" data-action="heal-all" ${any?'':'disabled'}>전체 치료 (+${Math.round(c.shopRules.healAllRatio*100)}%) ${coin(c.shopRules.healAllCost)}</button></section>
- <section class="zone"><div class="zone-head"><strong>동료 영입</strong><button type="button" class="link reroll" data-action="reroll">↻ 새로고침 ${coin(rerollCost(state,c))}</button></div><div class="offers">${sh.recruits.map(offerCard).join('')}</div></section>
- <section class="zone"><div class="zone-head"><strong>스티커</strong></div><div class="offers">${c.packs.map(p=>`<button type="button" class="offer item" data-action="buy-pack" data-pack="${p.id}"><span class="i-sym">${p.kinds==='star'?'★':'＋'}</span><span class="o-body"><b>${p.name}</b><span class="o-text">${p.text}</span></span><span class="price">${coin(p.cost)}</span></button>`).join('')}</div></section></main>
+ <section class="zone"><div class="zone-head"><strong>동료 영입</strong><button type="button" class="link reroll" data-action="reroll">↻ 새로고침 ${coin(rerollCost(state,c))}</button></div><div class="offers recruits">${sh.recruits.map(offerCard).join('')}</div></section>
+ <section class="zone"><div class="zone-head"><strong>스티커</strong></div><div class="offers packs">${c.packs.map(p=>`<button type="button" class="offer item" data-action="buy-pack" data-pack="${p.id}"><span class="i-sym">${p.kinds==='star'?'★':'＋'}</span><span class="o-body"><b>${p.name}</b><span class="o-text">${p.text}</span></span><span class="price">${coin(p.cost)}</span></button>`).join('')}</div></section></main>
  <footer class="dock"><button type="button" class="go" data-action="leave-shop">다음: ${next.kind.name} <small>체력 ${fmt(next.hp)} · 공격 ${fmt(next.atk)}</small></button></footer>`;
 }
 

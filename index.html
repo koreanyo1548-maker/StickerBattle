@@ -610,6 +610,11 @@ main.arena{position:relative}
 .shell.starter_pick.ready .rcard{cursor:pointer}.shell.starter_pick.ready .rcard:hover{transform:translateY(-8px)}
 .shell.starter_pick:not(.ready) .rcard{pointer-events:none}
 .rcard.missed{opacity:.55;transform:scale(.94)}
+/* 첫 동료 고르기: 앞면은 틀 없이 캐릭터를 카드 폭 가득 크게(뒷면은 카드 그대로). */
+.starter .rfront{overflow:visible;background:none;box-shadow:none;border-radius:0;color:var(--paper);padding:0;gap:2px;justify-content:flex-end}
+.starter .rfront canvas{width:112%;max-width:none;margin-top:-6px;filter:drop-shadow(0 6px 5px #0007)}
+.starter .rtitle{color:var(--paper)}.starter .rstat{color:var(--muted)}.starter .rfront small{color:var(--muted)}
+.rcard.picked .rfront canvas{filter:drop-shadow(0 0 10px var(--gold)) drop-shadow(0 6px 5px #0007)}
 .starter .got{text-align:center;font-family:var(--disp);font-size:20px;color:var(--gold)}
 
 /* 블라인드 선택·상점 */

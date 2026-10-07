@@ -638,6 +638,25 @@ main.arena{position:relative}
 .hand .sticker:not(.mini) .sname{font-size:14px;text-shadow:0 2px 0 #0009}
 .hand .sticker:not(.mini) .sdesc{color:#d9cde3;text-shadow:0 1px 0 #0009}
 .hand .sticker.sel .sicon{filter:drop-shadow(2px 0 0 #fff) drop-shadow(-2px 0 0 #fff) drop-shadow(0 2px 0 #fff) drop-shadow(0 -2px 0 #fff) drop-shadow(0 0 5px var(--tint)) drop-shadow(0 8px 6px #000a)}
+/* 상점: 게임화면처럼 틀 없이 그림을 크게. 영입은 동료 칸과 같은 3열, 스티커는 구분선 목록. */
+.shop .punit:not(.vacant){background:none;border:0;box-shadow:none;border-radius:0;padding:0 0 2px;overflow:visible}
+.shop .punit:not(.vacant) canvas{width:124%;max-width:none;margin:-8px -12% -4px;filter:drop-shadow(0 6px 4px #0007)}
+.shop .punit:not(.vacant) .uname{color:var(--paper);text-shadow:0 2px 0 #0009;font-size:14px}
+.shop .tile-ops{margin-top:6px}.shop .tile-ops button:not(.sell):not(.heal){background:#5d4d72}.shop .tile-ops button:disabled{opacity:.35}
+.shop .offers.recruits{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.shop .offers .offer{border-left:0}
+.shop .offers.recruits .offer{flex-direction:column;align-items:center;gap:2px;text-align:center;background:none;box-shadow:none;border-radius:0;padding:0;color:var(--paper)}
+.shop .recruits .offer canvas{width:118%;height:auto;aspect-ratio:1;margin:-4px -9% -6px;filter:drop-shadow(0 6px 4px #0007)}
+.shop .recruits .o-body{flex:none;align-items:center;width:100%}
+.shop .recruits .o-body b{font-size:14px;text-shadow:0 2px 0 #0009}
+.shop .recruits .o-text{font-size:12px}
+.shop .recruits .o-tags{font-size:10px;color:var(--muted);line-height:1.3}
+.shop .recruits .price{width:100%;margin-top:4px;padding:5px 0;font-size:15px;text-align:center;box-shadow:inset 0 0 0 1.5px #f5c64b66}
+.shop .offers.packs{gap:0}
+.shop .offers.packs .offer.item{background:none;box-shadow:none;border-radius:0;padding:8px 2px;color:var(--paper);border-bottom:1px solid var(--line)}
+.shop .offers.packs .offer.item:last-child{border-bottom:0}
+.shop .packs .i-sym{width:52px;height:52px;background:none;color:var(--gold);font-size:40px;text-shadow:2px 0 #fff,-2px 0 #fff,0 2px #fff,0 -2px #fff,0 5px 4px #0008}
+.shop .packs .o-text{color:var(--muted)}
 </style></head><body><div id="app"></div><div id="toast" role="status" aria-live="polite"></div><dialog id="info" tabindex="-1"><div id="info-content"></div><form method="dialog"><button class="go">닫기</button></form></dialog><script>(()=>{'use strict';const modules={};
 modules["src/content/art.mjs"]=(()=>{
 
@@ -1383,8 +1402,8 @@ function renderShop(){
  return stageTop('상점')+`<main class="shop">
  <section class="zone"><div class="zone-head"><strong>${uiIcon('people')} 원정대</strong><button type="button" class="link" data-action="deck">${uiIcon('cards')} 덱 ${r.deck.length}장</button></div>${partyRow('shop')}
  <button type="button" class="slot-buy" data-action="heal-all" ${any?'':'disabled'}>전체 치료 (+${Math.round(c.shopRules.healAllRatio*100)}%) ${coin(c.shopRules.healAllCost)}</button></section>
- <section class="zone"><div class="zone-head"><strong>동료 영입</strong><button type="button" class="link reroll" data-action="reroll">↻ 새로고침 ${coin(rerollCost(state,c))}</button></div><div class="offers">${sh.recruits.map(offerCard).join('')}</div></section>
- <section class="zone"><div class="zone-head"><strong>스티커</strong></div><div class="offers">${c.packs.map(p=>`<button type="button" class="offer item" data-action="buy-pack" data-pack="${p.id}"><span class="i-sym">${p.kinds==='star'?'★':'＋'}</span><span class="o-body"><b>${p.name}</b><span class="o-text">${p.text}</span></span><span class="price">${coin(p.cost)}</span></button>`).join('')}</div></section></main>
+ <section class="zone"><div class="zone-head"><strong>동료 영입</strong><button type="button" class="link reroll" data-action="reroll">↻ 새로고침 ${coin(rerollCost(state,c))}</button></div><div class="offers recruits">${sh.recruits.map(offerCard).join('')}</div></section>
+ <section class="zone"><div class="zone-head"><strong>스티커</strong></div><div class="offers packs">${c.packs.map(p=>`<button type="button" class="offer item" data-action="buy-pack" data-pack="${p.id}"><span class="i-sym">${p.kinds==='star'?'★':'＋'}</span><span class="o-body"><b>${p.name}</b><span class="o-text">${p.text}</span></span><span class="price">${coin(p.cost)}</span></button>`).join('')}</div></section></main>
  <footer class="dock"><button type="button" class="go" data-action="leave-shop">다음: ${next.kind.name} <small>체력 ${fmt(next.hp)} · 공격 ${fmt(next.atk)}</small></button></footer>`;
 }
 

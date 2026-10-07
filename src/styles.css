@@ -657,3 +657,8 @@ main.arena{position:relative}
 .shop .offers.packs .offer.item:last-child{border-bottom:0}
 .shop .packs .i-sym{width:52px;height:52px;background:none;color:var(--gold);font-size:40px;text-shadow:2px 0 #fff,-2px 0 #fff,0 2px #fff,0 -2px #fff,0 5px 4px #0008}
 .shop .packs .o-text{color:var(--muted)}
+/* 첫 동료 고르기: 앞면은 틀 없이 캐릭터를 카드 폭 가득 크게(뒷면은 카드 그대로). */
+.starter .rfront{overflow:visible;background:none;box-shadow:none;border-radius:0;color:var(--paper);padding:0;gap:2px;justify-content:flex-end}
+.starter .rfront canvas{width:112%;max-width:none;margin-top:-6px;filter:drop-shadow(0 6px 5px #0007)}
+.starter .rtitle{color:var(--paper);text-shadow:0 2px 0 #0009}.starter .rstat{color:var(--muted)}.starter .rfront small{color:var(--muted)}
+.rcard.picked .rfront canvas{filter:drop-shadow(0 0 6px var(--gold)) drop-shadow(0 6px 5px #0007)}
